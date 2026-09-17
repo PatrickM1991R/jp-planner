@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JP Planner</title>
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wrap{max-width:1320px;margin:36px auto;padding:0 24px}.card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 2px 14px rgba(0,0,0,.08);margin-bottom:22px}.muted{color:#667085}.grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}@media(max-width:850px){.grid{grid-template-columns:1fr}}button{padding:10px 16px;border:0;border-radius:8px;background:#1f2937;color:#fff;cursor:pointer}input[type=file],input[type=text]{padding:9px;border:1px solid #d0d5dd;border-radius:8px;margin-right:8px}.route-form{display:flex;gap:10px;flex-wrap:wrap}.route-form input{min-width:240px;flex:1}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}th{background:#f9fafb;position:sticky;top:0}.scroll{overflow:auto;max-height:650px}.error{background:#fee2e2;padding:12px;border-radius:8px;margin:12px 0}.ok{background:#dcfce7;padding:12px;border-radius:8px}.warn{background:#fef3c7;padding:12px;border-radius:8px}.badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:bold}.b-ok{background:#dcfce7;color:#166534}.b-warn{background:#fef3c7;color:#92400e}.b-bad{background:#fee2e2;color:#991b1b}.summary{display:flex;gap:28px;flex-wrap:wrap}.summary strong{display:block;font-size:28px}.small{font-size:12px;color:#667085}
+</style>
+</head>
+<body><div class="wrap">
+<div class="card">
+<h1>JP Planner</h1>
+<p class="muted">Opdrachten herkennen, locaties oplossen en autoroutes berekenen.</p>
+{% if ors_configured %}<div class="ok">OpenRouteService is gekoppeld — profiel: <strong>driving-car</strong>.</div>{% else %}<div class="warn">ORS_API_KEY is nog niet ingesteld. Importeren werkt al; geocoding en autoroutes starten zodra de sleutel in Render staat.</div>{% endif %}
+{% if error %}<div class="error">{{error}}</div>{% endif %}
+</div>
+
+<div class="grid">
+<div class="card">
+<h2>1. Opdrachten importeren</h2>
+<form action="/upload" method="post" enctype="multipart/form-data"><input type="file" name="file" accept=".pdf,.xlsx,.xls" required><button>Bestand uitlezen</button></form>
+<p class="small">Smart Event Manager PDF of Excel. Activiteiten en locatiehints worden automatisch herkend.</p>
+</div>
+<div class="card">
+<h2>2. Autoroute testen</h2>
+<form class="route-form" action="/route-test" method="post">
+<input type="text" name="origin" placeholder="bijv. Assen" required>
+<input type="text" name="destination" placeholder="bijv. Kaap Hoorn, Haren" required>
+<button>Bereken route</button>
+</form>
+</div>
+</div>
+
+{% if route_result %}
+<div class="card">
+<h2>Autoroute</h2>
+<div class="summary">
+<div><span class="small">Afstand</span><strong>{{route_result.distance_km}} km</strong></div>
+<div><span class="small">Rijtijd</span><strong>{{route_result.duration_minutes}} min</strong></div>
+<div><span class="small">Van</span><b>{{route_result.origin.label}}</b></div>
+<div><span class="small">Naar</span><b>{{route_result.destination.label}}</b></div>
+</div>
+</div>
+{% endif %}
+
+{% if rows is not none %}
+<div class="card"><h2>{{rows|length}} opdrachten herkend</h2>
+<div class="scroll"><table><tr><th>Datum</th><th>Tijd</th><th>Aantal</th><th>Activiteit(en)</th><th>Locatiehint</th><th>Locatiestatus</th><th>Gevonden locatie</th><th>Omschrijving</th><th>Ref.</th></tr>
+{% for r in rows %}<tr>
+<td>{{r.date}}</td><td>{{r.start}}–{{r.end}}</td><td>{{r.participants}}</td><td>{{r.activity}}</td><td>{{r.location_hint}}</td>
+<td>{% set s=r.location.status %}{% if s in ['cached','geocoded'] %}<span class="badge b-ok">{{s}}</span>{% elif s in ['needs_api','missing'] %}<span class="badge b-warn">{{s}}</span>{% else %}<span class="badge b-bad">{{s}}</span>{% endif %}</td>
+<td>{% if r.location.label %}{{r.location.label}}{% else %}—{% endif %}</td><td>{{r.description}}</td><td>{{r.reference}}</td>
+</tr>{% endfor %}</table></div></div>
+{% endif %}
+</div></body></html>
