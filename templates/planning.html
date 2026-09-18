@@ -1,11 +1,152 @@
-<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Logistieke planning - JP Planner</title><style>
-body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wrap{max-width:1500px;margin:32px auto;padding:0 24px}.card{background:#fff;border-radius:14px;padding:22px;box-shadow:0 2px 14px rgba(0,0,0,.08);margin-bottom:20px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}th{background:#f9fafb}.summary{display:flex;gap:35px;flex-wrap:wrap}.summary strong{font-size:28px;display:block}.small,.muted{color:#667085;font-size:12px}.warn{background:#fef3c7;padding:10px;border-radius:8px;margin:6px 0}.bad{background:#fee2e2;padding:10px;border-radius:8px}.ok{background:#dcfce7;padding:10px;border-radius:8px}.pill{display:inline-block;padding:3px 8px;border-radius:999px;background:#eef2ff;font-size:12px}select{padding:7px;border:1px solid #d0d5dd;border-radius:7px;max-width:260px}button{padding:10px 16px;border:0;border-radius:8px;background:#1f2937;color:white;cursor:pointer}.scroll{overflow:auto}</style></head><body><div class="wrap">
-<div class="card"><h1>Logistiek routevoorstel</h1><p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a></p><p class="muted">Smart Event Manager is leidend voor de spelstart en het speleinde. Standaard rekent JP Planner 30 minuten opbouw ervoor en 30 minuten opruimen erna. Alle tijden zijn hieronder handmatig aanpasbaar. Dit is een voorstel op basis van rijafstand, tijden, standplaatsen en standaard spelmateriaal. Pas een voertuig handmatig aan en klik daarna op herberekenen.</p></div>
-<div class="card"><div class="summary"><div><span class="small">Totale kilometers</span><strong>{{plan.total_distance_km}} km</strong></div><div><span class="small">Totale rijtijd</span><strong>{{plan.total_drive_minutes}} min</strong></div><div><span class="small">Niet ingepland</span><strong>{{plan.unplanned_count}}</strong></div><div><span class="small">Voertuigen gebruikt</span><strong>{{plan.vehicle_routes|length}}</strong></div></div></div>
-{% if plan.warnings %}<div class="card"><h2>Waarschuwingen</h2>{% for w in plan.warnings %}<div class="warn">{{w}}</div>{% endfor %}</div>{% endif %}
-<div class="card"><h2>Planning per opdracht</h2><form action="/generate-logistics" method="post"><input type="hidden" name="row_count" value="{{plan.jobs|length}}"><div class="scroll"><table><tr><th>Datum / Smart Event tijd</th><th>Werkblok begeleider</th><th>Spel</th><th>Locatie</th><th>Aantal</th><th>Med.</th><th>Voertuigvoorstel</th><th>Vertrek</th><th>Rit</th><th>Status / materiaal</th></tr>
-{% for j in plan.jobs %}<tr><td>{{j.date}}<br><label class="small">Start spel</label><br><input type="time" name="start_{{loop.index0}}" value="{{j.start}}" style="padding:5px;width:105px"><br><label class="small">Einde spel</label><br><input type="time" name="end_{{loop.index0}}" value="{{j.end}}" style="padding:5px;width:105px"></td><td><strong>{{j.arrival_time or '—'}} aanwezig</strong><br><span class="small">Opbouw</span> <input type="number" min="0" name="setup_{{loop.index0}}" value="{{j.setup_minutes}}" style="width:55px"> min<br><span class="small">Spel {{j.start}}–{{j.end}}</span><br><span class="small">Opruimen</span> <input type="number" min="0" name="cleanup_{{loop.index0}}" value="{{j.cleanup_minutes}}" style="width:55px"> min<br><strong>{{j.available_time or '—'}} beschikbaar</strong></td><td>{{j.activity}}</td><td>{{j.location_text}}</td><td>{{j.participants}}</td><td>{{j.staff_required}}</td><td><select name="override_{{loop.index0}}"><option value="">Automatisch</option>{% for v in plan.vehicles %}<option value="{{v.code}}" {% if j.vehicle_code==v.code %}selected{% endif %}>{{v.code}}</option>{% endfor %}</select></td><td>{{j.departure_time or '—'}}</td><td>{% if j.travel_km is not none %}{{j.travel_km}} km<br>{{j.travel_minutes}} min{% else %}—{% endif %}</td><td>{% if j.status=='planned' %}<span class="pill">ingepland</span>{% else %}<span class="bad">niet ingepland</span>{% endif %}{% for w in j.warnings %}<div class="warn">{{w}}</div>{% endfor %}</td></tr>
-<input type="hidden" name="date_{{loop.index0}}" value="{{j.date}}"><input type="hidden" name="participants_{{loop.index0}}" value="{{j.participants}}"><input type="hidden" name="staff_{{loop.index0}}" value="{{j.staff_required}}"><input type="hidden" name="activity_{{loop.index0}}" value="{{j.activity}}"><input type="hidden" name="location_{{loop.index0}}" value="{{j.location_text}}"><input type="hidden" name="reference_{{loop.index0}}" value="{{j.reference}}">
-{% endfor %}</table></div><p><button>Herbereken met voertuigkeuzes</button></p></form></div>
-{% for r in plan.vehicle_routes %}<div class="card"><h2>{{r.vehicle_code}}</h2><p><strong>{{r.depot_name}}</strong> — {{r.depot_address}} · vertrek {{r.first_departure}} · terug ca. {{r.return_time}}</p><p><span class="pill">{{r.distance_km}} km</span> <span class="pill">{{r.drive_minutes}} min rijden</span></p><ol>{% for j in r.jobs %}<li><strong>{{j.arrival_time}} aanwezig · {{j.start}} {{j.activity}} · {{j.available_time}} klaar</strong> — {{j.location_text}} (ref. {{j.reference}})</li>{% endfor %}</ol></div>{% endfor %}
-</div></body></html>
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dienstenplanning - JP Planner</title>
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wrap{max-width:1500px;margin:28px auto;padding:0 22px}.card{background:#fff;border-radius:14px;padding:22px;box-shadow:0 2px 14px rgba(0,0,0,.08);margin-bottom:18px}.topline{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap}.summary{display:flex;gap:34px;flex-wrap:wrap}.summary strong{font-size:26px;display:block}.small,.muted{color:#667085;font-size:12px}.warn{background:#fef3c7;padding:10px;border-radius:8px;margin:6px 0}.bad{background:#fee2e2;padding:10px;border-radius:8px}.ok{background:#dcfce7;padding:10px;border-radius:8px}.pill{display:inline-block;padding:4px 9px;border-radius:999px;background:#eef2ff;font-size:12px;margin-right:5px}.service{border:2px solid #e5e7eb}.service-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid #e5e7eb}.service-title h2{margin:0 0 5px}.service-stats{display:flex;gap:22px;flex-wrap:wrap}.service-stats strong{display:block;font-size:20px}.job{padding:16px 0;border-bottom:1px solid #eceff3}.job:last-child{border-bottom:0}.job-grid{display:grid;grid-template-columns:140px 180px minmax(220px,1.3fr) minmax(210px,1fr) 95px minmax(220px,1fr);gap:14px;align-items:start}.job h3{margin:0 0 5px;font-size:16px}.fieldline{margin:4px 0}.fieldline label{display:inline-block;min-width:68px;font-size:12px;color:#667085}input[type=time],input[type=number],select{padding:7px;border:1px solid #d0d5dd;border-radius:7px;background:white}input[type=time]{width:100px}input[type=number]{width:58px}select{width:100%;max-width:280px}button{padding:11px 17px;border:0;border-radius:8px;background:#1f2937;color:white;cursor:pointer;font-weight:700}.buttonbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.route-arrow{font-size:20px;color:#667085;margin-right:6px}.unplanned{border:2px solid #fecaca}.material{border:2px solid #f59e0b}.meta{line-height:1.45}.manual-note{background:#eff6ff;border-radius:8px;padding:10px 12px;margin-top:10px}.date-head{font-size:13px;color:#667085}.service-path{margin:12px 0 0;padding:10px 12px;background:#f8fafc;border-radius:8px;line-height:1.7}.service-path span{white-space:nowrap}@media(max-width:1050px){.job-grid{grid-template-columns:1fr 1fr}.job-grid>div:nth-child(3),.job-grid>div:nth-child(4),.job-grid>div:nth-child(6){grid-column:span 2}}@media(max-width:650px){.job-grid{display:block}.job-grid>div{margin-bottom:12px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="card">
+  <div class="topline">
+    <div>
+      <h1>Dienstenplanning & routes</h1>
+      <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a></p>
+      <p class="muted">Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen → terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur. Smart Event Manager blijft leidend voor spelstart en speleinde.</p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="summary">
+    <div><span class="small">Totale kilometers</span><strong>{{plan.total_distance_km}} km</strong></div>
+    <div><span class="small">Totale rijtijd</span><strong>{{plan.total_drive_minutes}} min</strong></div>
+    <div><span class="small">Diensten</span><strong>{{plan.vehicle_routes|length}}</strong></div>
+    <div><span class="small">Niet ingepland</span><strong>{{plan.unplanned_count}}</strong></div>
+    <div><span class="small">Materiaalproblemen</span><strong>{{plan.material_problem_count}}</strong></div>
+  </div>
+</div>
+
+{% if plan.warnings %}
+<div class="card"><h2>Waarschuwingen</h2>{% for w in plan.warnings %}<div class="warn">{{w}}</div>{% endfor %}</div>
+{% endif %}
+
+<form action="/generate-logistics" method="post">
+<input type="hidden" name="row_count" value="{{plan.jobs|length}}">
+<div class="card">
+  <div class="topline">
+    <div><h2 style="margin:0 0 5px">Planning handmatig aanpassen</h2><div class="muted">Wijzig per klus de bus, eigen vervoer, start/eindtijd, opbouw of opruimtijd. Klik daarna op Herberekenen; JP Planner bouwt alle diensten en routes opnieuw op.</div></div>
+    <div class="buttonbar"><button type="submit">Herbereken volledige planning</button></div>
+  </div>
+</div>
+
+{% for r in plan.vehicle_routes %}
+<div class="card service">
+  <div class="service-head">
+    <div class="service-title">
+      <div class="date-head">{{r.date}}</div>
+      <h2>Dienst {{r.service_number}} — {{r.vehicle_code}}{% if r.own_transport %} · eigen vervoer{% endif %}</h2>
+      <div class="meta"><strong>{{r.depot_name}}</strong> — {{r.depot_address}}</div>
+    </div>
+    <div class="service-stats">
+      <div><span class="small">Dienst</span><strong>{{r.first_departure}}–{{r.return_time}}</strong><span class="small">{{r.duty_duration}}</span></div>
+      <div><span class="small">Klussen</span><strong>{{r.jobs|length}}</strong></div>
+      <div><span class="small">Afstand</span><strong>{{r.distance_km}} km</strong></div>
+      <div><span class="small">Rijtijd</span><strong>{{r.drive_minutes}} min</strong></div>
+    </div>
+  </div>
+  <div class="service-path">
+    <span>🏠 {{r.depot_name}}</span>
+    {% for j in r.jobs %}<span> → <strong>{{j.start}} {{j.activity}}</strong> ({{j.location_text}})</span>{% endfor %}
+    <span> → 🏠 {{r.depot_name}}</span>
+  </div>
+
+  {% for j in r.jobs %}
+  {% set i=j.form_index %}
+  <div class="job">
+    <div class="job-grid">
+      <div>
+        <div class="small">Tijd</div>
+        <h3>{{j.arrival_time}} aanwezig</h3>
+        <div class="fieldline"><label>Start spel</label><input type="time" name="start_{{i}}" value="{{j.start}}"></div>
+        <div class="fieldline"><label>Einde spel</label><input type="time" name="end_{{i}}" value="{{j.end}}"></div>
+      </div>
+      <div>
+        <div class="small">Werkblok</div>
+        <div class="fieldline"><label>Opbouw</label><input type="number" min="0" name="setup_{{i}}" value="{{j.setup_minutes}}"> min</div>
+        <div><strong>{{j.start}}–{{j.end}}</strong> spel</div>
+        <div class="fieldline"><label>Opruimen</label><input type="number" min="0" name="cleanup_{{i}}" value="{{j.cleanup_minutes}}"> min</div>
+        <div><strong>{{j.available_time}}</strong> beschikbaar</div>
+      </div>
+      <div>
+        <div class="small">Klus</div>
+        <h3>{{j.activity}}</h3>
+        <div>{{j.location_text}}</div>
+        <div class="small">Ref. {{j.reference}}</div>
+      </div>
+      <div>
+        <div class="small">Bus / vervoer handmatig</div>
+        <select name="override_{{i}}">
+          <option value="">Automatisch</option>
+          {% for v in plan.vehicles %}<option value="{{v.code}}" {% if j.vehicle_code==v.code %}selected{% endif %}>{{v.code}}</option>{% endfor %}
+        </select>
+        <div class="manual-note small">Wijzig dit om deze klus naar een andere bus of eigen vervoer te verplaatsen. Herberekenen controleert daarna de volledige route opnieuw.</div>
+      </div>
+      <div>
+        <div class="small">Bezetting</div>
+        <h3>{{j.participants}} pers.</h3>
+        <div>{{j.staff_required}} medewerker(s)</div>
+      </div>
+      <div>
+        <div class="small">Rit naar deze klus</div>
+        <h3>{{j.departure_time}} vertrek</h3>
+        {% if j.travel_km is not none %}<div>{{j.travel_km}} km · {{j.travel_minutes}} min</div>{% else %}<div>—</div>{% endif %}
+        {% if j.status=='planned_own_transport' %}<div class="ok">Eigen vervoer + voorraadset</div>{% endif %}
+        {% for w in j.warnings %}<div class="warn">{{w}}</div>{% endfor %}
+      </div>
+    </div>
+  </div>
+  <input type="hidden" name="date_{{i}}" value="{{j.date}}">
+  <input type="hidden" name="participants_{{i}}" value="{{j.participants}}">
+  <input type="hidden" name="staff_{{i}}" value="{{j.staff_required}}">
+  <input type="hidden" name="activity_{{i}}" value="{{j.activity}}">
+  <input type="hidden" name="location_{{i}}" value="{{j.location_text}}">
+  <input type="hidden" name="reference_{{i}}" value="{{j.reference}}">
+  {% endfor %}
+</div>
+{% endfor %}
+
+{% if plan.unplanned_jobs %}
+<div class="card unplanned">
+  <h2>Nog niet als dienst ingepland</h2>
+  <p class="muted">Deze klussen staan bewust apart. Kies eventueel handmatig een bus of eigen vervoer en klik op Herberekenen.</p>
+  {% for j in plan.unplanned_jobs %}
+  {% set i=j.form_index %}
+  <div class="job {% if j.material_problem %}material{% endif %}">
+    <div class="job-grid">
+      <div><div class="small">Datum / tijd</div><h3>{{j.date}}</h3><div>{{j.start}}–{{j.end}}</div><div>{{j.arrival_time}} aanwezig</div></div>
+      <div><div class="small">Werkblok</div><div class="fieldline"><label>Opbouw</label><input type="number" min="0" name="setup_{{i}}" value="{{j.setup_minutes}}"> min</div><div class="fieldline"><label>Opruimen</label><input type="number" min="0" name="cleanup_{{i}}" value="{{j.cleanup_minutes}}"> min</div><input type="hidden" name="start_{{i}}" value="{{j.start}}"><input type="hidden" name="end_{{i}}" value="{{j.end}}"></div>
+      <div><div class="small">Klus</div><h3>{{j.activity}}</h3><div>{{j.location_text}}</div><div class="small">Ref. {{j.reference}}</div></div>
+      <div><div class="small">Bus / vervoer handmatig</div><select name="override_{{i}}"><option value="">Automatisch</option>{% for v in plan.vehicles %}<option value="{{v.code}}">{{v.code}}</option>{% endfor %}</select></div>
+      <div><div class="small">Bezetting</div><h3>{{j.participants}} pers.</h3><div>{{j.staff_required}} medewerker(s)</div></div>
+      <div>{% if j.material_problem %}<div class="bad"><strong>❗ MATERIAALPROBLEEM</strong></div>{% else %}<div class="bad">Niet ingepland</div>{% endif %}{% for w in j.warnings %}<div class="warn">{{w}}</div>{% endfor %}</div>
+    </div>
+  </div>
+  <input type="hidden" name="date_{{i}}" value="{{j.date}}">
+  <input type="hidden" name="participants_{{i}}" value="{{j.participants}}">
+  <input type="hidden" name="staff_{{i}}" value="{{j.staff_required}}">
+  <input type="hidden" name="activity_{{i}}" value="{{j.activity}}">
+  <input type="hidden" name="location_{{i}}" value="{{j.location_text}}">
+  <input type="hidden" name="reference_{{i}}" value="{{j.reference}}">
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card"><div class="buttonbar"><button type="submit">Herbereken volledige planning</button><span class="muted">Alle handmatige voertuig- en tijdkeuzes worden opnieuw gecontroleerd op haalbaarheid, reistijd en materiaal.</span></div></div>
+</form>
+</div>
+</body>
+</html>
