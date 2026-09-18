@@ -75,7 +75,7 @@ class LocationService:
             "size": size,
         }
         headers = {"Authorization": self.api_key}
-        r = requests.get(f"{ORS_BASE}/geocode/search", params=params, headers=headers, timeout=30)
+        r = requests.get(f"{ORS_BASE}/geocode/search", params=params, headers=headers, timeout=(2.5, 5.0))
         if not r.ok:
             raise LocationServiceError(f"ORS geocode fout {r.status_code}: {r.text[:250]}")
         features = r.json().get("features", [])

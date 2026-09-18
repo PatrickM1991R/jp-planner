@@ -1,5 +1,5 @@
 import math
-import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 
 from location_service import LocationService
@@ -64,37 +64,36 @@ def _is_own_transport(code):
 
 
 def _resolve_many(texts):
-    """Resolve locations conservatively.
+    """Resolve locations fast enough for a synchronous Render request.
 
-    Render/ORS can throttle or time out when many geocode requests are fired in
-    parallel. Resolve sequentially, reuse persistent DB/local cache via
-    LocationService, and retry transient failures. One bad location is returned
-    as unresolved rather than aborting the entire planning run.
+    Cached locations return immediately. Uncached locations are geocoded in a
+    small worker pool with a short HTTP timeout. There are deliberately no
+    sleeps or retries here: an unresolved location is marked for manual review
+    while the rest of the planning continues.
     """
-    service = LocationService()
     unique = list(dict.fromkeys(t for t in texts if t))
     out = {}
-    for text in unique:
-        last_error = None
-        for attempt in range(3):
-            try:
-                item = service.resolve(text, use_cache=True)
-                if item.get('lat') is not None and item.get('lon') is not None:
-                    out[text] = item
-                    last_error = None
-                    break
-                last_error = item.get('status', 'unresolved')
-                # Missing/unresolved is normally not transient; only retry API-ish states.
-                if last_error not in {'error', 'needs_api'}:
-                    break
-            except Exception as exc:
-                last_error = str(exc)
-            if attempt < 2:
-                time.sleep(0.6 * (attempt + 1))
-        if text not in out:
-            out[text] = {'status': 'unresolved', 'query': text, 'error': last_error or ''}
-        # Gentle pacing avoids bursts against the ORS geocoder on uncached imports.
-        time.sleep(0.15)
+
+    def resolve_one(text):
+        try:
+            item = LocationService().resolve(text, use_cache=True)
+            if item.get('lat') is not None and item.get('lon') is not None:
+                return text, item
+            return text, {
+                'status': item.get('status', 'unresolved'),
+                'query': text,
+                'error': item.get('error', ''),
+            }
+        except Exception as exc:
+            return text, {'status': 'unresolved', 'query': text, 'error': str(exc)}
+
+    # A small pool prevents a burst while avoiding serial 5s+ waits for many jobs.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(resolve_one, text) for text in unique]
+        for future in as_completed(futures):
+            text, item = future.result()
+            out[text] = item
+
     return out
 
 
