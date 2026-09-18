@@ -51,10 +51,10 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 <p class="muted">Controleer vooral de twee witte velden <strong>Spel</strong> en <strong>Locatie / adres</strong>. Pas ze aan waar nodig en klik daarna op <strong>Correcties opslaan</strong>.</p>
 <form action="/save-corrections" method="post">
 <input type="hidden" name="row_count" value="{{rows|length}}">
-<div class="actions"><button type="submit">Correcties opslaan</button><span class="small">Opgeslagen correcties worden bij een volgende upload automatisch toegepast.</span></div>
+<div class="actions"><button type="submit">Correcties opslaan</button><button type="submit" formaction="/generate-logistics" formmethod="post">Genereer logistieke planning</button><span class="small">De planning gebruikt je huidige Spel-, Locatie- en Medewerkersvelden.</span></div>
 <div class="scroll"><table><tr><th>Datum</th><th>Tijd</th><th>Aantal</th><th>Medewerkers</th><th>Spel</th><th>Locatie / adres</th><th>Status</th><th>Gevonden locatie</th><th>Omschrijving</th><th>Ref.</th></tr>
 {% for r in rows %}<tr>
-<td>{{r.date}}</td><td>{{r.start}}–{{r.end}}</td><td>{{r.participants}}</td><td><input style="width:70px" type="number" min="1" name="staff_{{loop.index0}}" value="{{r.staff_required}}"><span class="source">bron: {{r.staff_source}}{% if r.staff_source == 'rule' %} (30+ = 2){% endif %}</span></td>
+<td>{{r.date}}<input type="hidden" name="date_{{loop.index0}}" value="{{r.date}}"></td><td>{{r.start}}–{{r.end}}<input type="hidden" name="start_{{loop.index0}}" value="{{r.start}}"><input type="hidden" name="end_{{loop.index0}}" value="{{r.end}}"><input type="hidden" name="setup_{{loop.index0}}" value="30"><input type="hidden" name="cleanup_{{loop.index0}}" value="30"></td><td>{{r.participants}}<input type="hidden" name="participants_{{loop.index0}}" value="{{r.participants}}"></td><td><input style="width:70px" type="number" min="1" name="staff_{{loop.index0}}" value="{{r.staff_required}}"><span class="source">bron: {{r.staff_source}}{% if r.staff_source == 'rule' %} (30+ = 2){% endif %}</span></td>
 <td>
 <input class="edit-input" type="text" name="activity_{{loop.index0}}" value="{{r.activity}}">
 <input type="hidden" name="original_activity_{{loop.index0}}" value="{{r.original_activity}}">
@@ -68,7 +68,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 <td>{% set s=r.location.status %}{% if s in ['cached','geocoded','confirmed','saved'] %}<span class="badge b-ok">{{s}}</span>{% elif s in ['needs_api','missing','needs_review'] %}<span class="badge b-warn">{{s}}</span>{% else %}<span class="badge b-bad">{{s}}</span>{% endif %}</td>
 <td>{% if r.location.label %}{{r.location.label}}{% else %}—{% endif %}</td><td>{{r.description}}</td><td>{{r.reference}}<input type="hidden" name="reference_{{loop.index0}}" value="{{r.reference}}"></td>
 </tr>{% endfor %}</table></div>
-<div class="actions"><button type="submit">Correcties opslaan</button></div>
+<div class="actions"><button type="submit">Correcties opslaan</button><button type="submit" formaction="/generate-logistics" formmethod="post">Genereer logistieke planning</button></div>
 </form></div>
 {% endif %}
 </div></body></html>
