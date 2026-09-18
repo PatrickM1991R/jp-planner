@@ -5,6 +5,7 @@ import db
 from location_service import LocationService, LocationServiceError, clean_location_hint
 from ors_client import ORSClient, ORSError
 from parser import parse_upload
+from planning_engine import build_logistics_plan
 
 load_dotenv(); app=Flask(__name__); app.secret_key=os.getenv('FLASK_SECRET_KEY','dev-change-me')
 
@@ -60,6 +61,41 @@ def save_corrections():
         items.append({'reference':(request.form.get(f'reference_{i}') or '').strip(),'original_activity':(request.form.get(f'original_activity_{i}') or '').strip(),'original_location_hint':(request.form.get(f'original_location_hint_{i}') or '').strip(),'activity':(request.form.get(f'activity_{i}') or '').strip(),'location_text':(request.form.get(f'location_{i}') or '').strip(),'staff_required':staff})
     try: db.save_corrections_batch(items); return render_home(message=f'{len(items)} regels opgeslagen. Ook het aantal medewerkers wordt onthouden.')
     except Exception as e: return render_home(error=f'Opslaan mislukt: {e}')
+
+
+def _jobs_from_form(form):
+    count=int(form.get('row_count','0') or 0)
+    jobs=[]
+    overrides={}
+    for i in range(count):
+        ref=(form.get(f'reference_{i}') or '').strip()
+        jobs.append({
+            'date':(form.get(f'date_{i}') or '').strip(),
+            'start':(form.get(f'start_{i}') or '').strip(),
+            'end':(form.get(f'end_{i}') or '').strip(),
+            'participants':(form.get(f'participants_{i}') or '').strip(),
+            'staff_required':int(form.get(f'staff_{i}') or 1),
+            'setup_minutes':max(0,int(form.get(f'setup_{i}') or 30)),
+            'cleanup_minutes':max(0,int(form.get(f'cleanup_{i}') or 30)),
+            'activity':(form.get(f'activity_{i}') or '').strip(),
+            'location_text':(form.get(f'location_{i}') or '').strip(),
+            'reference':ref,
+        })
+        ov=(form.get(f'override_{i}') or '').strip()
+        if ov and ref: overrides[ref]=ov
+    return jobs,overrides
+
+@app.post('/generate-logistics')
+def generate_logistics():
+    try:
+        jobs,overrides=_jobs_from_form(request.form)
+        if not jobs: return render_home(error='Geen opdrachten ontvangen voor de planning.')
+        depots,vehicles,stock,resources=db.get_logistics()
+        plan=build_logistics_plan(jobs,depots,vehicles,stock,resources,overrides)
+        return render_template('planning.html',plan=plan)
+    except Exception as e:
+        return render_home(error=f'Planning genereren mislukt: {e}')
+
 @app.get('/fleet')
 def fleet():
     try:
