@@ -64,100 +64,76 @@ def ensure_schema():
         conn.commit()
 
 
-def get_location_alias(alias_text):
-    if not configured() or not alias_text:
-        return None
+def preload_corrections():
+    """Load all small correction tables in one DB connection for fast uploads."""
+    if not configured():
+        return {}, {}, {}
     ensure_schema()
-    key = _norm(alias_text)
     with connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM location_aliases WHERE alias_key=%s", (key,))
-            return cur.fetchone()
+            cur.execute("SELECT alias_key, canonical_activity FROM activity_aliases")
+            activities = {r["alias_key"]: r["canonical_activity"] for r in cur.fetchall()}
+            cur.execute("SELECT alias_key, location_text, label, lat, lon FROM location_aliases")
+            locations = {r["alias_key"]: r for r in cur.fetchall()}
+            cur.execute("SELECT reference, activity, location_text FROM reservation_corrections")
+            reservations = {str(r["reference"]): r for r in cur.fetchall()}
+    return activities, locations, reservations
 
 
-def upsert_location_alias(alias_text, location_text, resolved=None):
-    if not configured() or not alias_text or not location_text:
-        return
+def save_corrections_batch(items):
+    """Save all edited rows in one transaction; no external API calls here."""
+    if not configured():
+        raise RuntimeError("DATABASE_URL ontbreekt.")
     ensure_schema()
-    resolved = resolved or {}
     with connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO location_aliases(alias_key, alias_text, location_text, label, lat, lon, updated_at)
-                VALUES (%s,%s,%s,%s,%s,%s,NOW())
-                ON CONFLICT(alias_key) DO UPDATE SET
-                  alias_text=EXCLUDED.alias_text,
-                  location_text=EXCLUDED.location_text,
-                  label=EXCLUDED.label,
-                  lat=EXCLUDED.lat,
-                  lon=EXCLUDED.lon,
-                  updated_at=NOW()
-                """,
-                (
-                    _norm(alias_text), alias_text, location_text,
-                    resolved.get("label"), resolved.get("lat"), resolved.get("lon")
-                ),
-            )
+            for item in items:
+                reference = item.get("reference", "").strip()
+                original_activity = item.get("original_activity", "").strip()
+                original_location_hint = item.get("original_location_hint", "").strip()
+                activity = item.get("activity", "").strip()
+                location_text = item.get("location_text", "").strip()
+
+                if reference:
+                    cur.execute(
+                        """
+                        INSERT INTO reservation_corrections(reference, activity, location_text, updated_at)
+                        VALUES (%s,%s,%s,NOW())
+                        ON CONFLICT(reference) DO UPDATE SET
+                          activity=EXCLUDED.activity,
+                          location_text=EXCLUDED.location_text,
+                          updated_at=NOW()
+                        """,
+                        (reference, activity, location_text),
+                    )
+
+                if original_activity and original_activity != "ONBEKEND" and activity and activity != original_activity:
+                    cur.execute(
+                        """
+                        INSERT INTO activity_aliases(alias_key, alias_text, canonical_activity, updated_at)
+                        VALUES (%s,%s,%s,NOW())
+                        ON CONFLICT(alias_key) DO UPDATE SET
+                          alias_text=EXCLUDED.alias_text,
+                          canonical_activity=EXCLUDED.canonical_activity,
+                          updated_at=NOW()
+                        """,
+                        (_norm(original_activity), original_activity, activity),
+                    )
+
+                if original_location_hint and location_text:
+                    cur.execute(
+                        """
+                        INSERT INTO location_aliases(alias_key, alias_text, location_text, updated_at)
+                        VALUES (%s,%s,%s,NOW())
+                        ON CONFLICT(alias_key) DO UPDATE SET
+                          alias_text=EXCLUDED.alias_text,
+                          location_text=EXCLUDED.location_text,
+                          updated_at=NOW()
+                        """,
+                        (_norm(original_location_hint), original_location_hint, location_text),
+                    )
         conn.commit()
 
 
-def get_activity_alias(alias_text):
-    if not configured() or not alias_text:
-        return None
-    ensure_schema()
-    with connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT canonical_activity FROM activity_aliases WHERE alias_key=%s", (_norm(alias_text),))
-            row = cur.fetchone()
-            return row["canonical_activity"] if row else None
-
-
-def upsert_activity_alias(alias_text, canonical_activity):
-    if not configured() or not alias_text or not canonical_activity:
-        return
-    ensure_schema()
-    with connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO activity_aliases(alias_key, alias_text, canonical_activity, updated_at)
-                VALUES (%s,%s,%s,NOW())
-                ON CONFLICT(alias_key) DO UPDATE SET
-                  alias_text=EXCLUDED.alias_text,
-                  canonical_activity=EXCLUDED.canonical_activity,
-                  updated_at=NOW()
-                """,
-                (_norm(alias_text), alias_text, canonical_activity),
-            )
-        conn.commit()
-
-
-def get_reservation_correction(reference):
-    if not configured() or not reference:
-        return None
-    ensure_schema()
-    with connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT activity, location_text FROM reservation_corrections WHERE reference=%s", (str(reference),))
-            return cur.fetchone()
-
-
-def upsert_reservation_correction(reference, activity, location_text):
-    if not configured() or not reference:
-        return
-    ensure_schema()
-    with connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO reservation_corrections(reference, activity, location_text, updated_at)
-                VALUES (%s,%s,%s,NOW())
-                ON CONFLICT(reference) DO UPDATE SET
-                  activity=EXCLUDED.activity,
-                  location_text=EXCLUDED.location_text,
-                  updated_at=NOW()
-                """,
-                (str(reference), activity, location_text),
-            )
-        conn.commit()
+def norm_key(text):
+    return _norm(text)

@@ -65,7 +65,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 <input type="hidden" name="original_location_hint_{{loop.index0}}" value="{{r.original_location_hint}}">
 <span class="source">bron: {{r.location_source}}</span>
 </td>
-<td>{% set s=r.location.status %}{% if s in ['cached','geocoded','confirmed'] %}<span class="badge b-ok">{{s}}</span>{% elif s in ['needs_api','missing'] %}<span class="badge b-warn">{{s}}</span>{% else %}<span class="badge b-bad">{{s}}</span>{% endif %}</td>
+<td>{% set s=r.location.status %}{% if s in ['cached','geocoded','confirmed','saved'] %}<span class="badge b-ok">{{s}}</span>{% elif s in ['needs_api','missing','needs_review'] %}<span class="badge b-warn">{{s}}</span>{% else %}<span class="badge b-bad">{{s}}</span>{% endif %}</td>
 <td>{% if r.location.label %}{{r.location.label}}{% else %}—{% endif %}</td><td>{{r.description}}</td><td>{{r.reference}}<input type="hidden" name="reference_{{loop.index0}}" value="{{r.reference}}"></td>
 </tr>{% endfor %}</table></div>
 <div class="actions"><button type="submit">Correcties opslaan</button></div>

@@ -23,77 +23,59 @@ def db_status():
         return False
 
 
-def apply_saved_activity(row):
-    original = row.get('activity', '')
-    row['original_activity'] = original
-    ref_fix = db.get_reservation_correction(row.get('reference')) if db.configured() else None
-    if ref_fix and ref_fix.get('activity'):
-        row['activity'] = ref_fix['activity']
-        row['activity_source'] = 'reference'
-        return
-    alias = db.get_activity_alias(original) if db.configured() and original and original != 'ONBEKEND' else None
-    if alias:
-        row['activity'] = alias
-        row['activity_source'] = 'database'
-    else:
-        row['activity_source'] = 'automatic'
-
-
-def resolve_row_location(row, service):
-    hint = clean_location_hint(row.get('location_hint', ''))
-    row['location_hint'] = hint
-    row['original_location_hint'] = hint
-
-    ref_fix = db.get_reservation_correction(row.get('reference')) if db.configured() else None
-    corrected_text = (ref_fix or {}).get('location_text') if ref_fix else None
-
-    alias = db.get_location_alias(hint) if db.configured() and hint else None
-    if corrected_text:
-        query = corrected_text
-        try:
-            resolved = service.resolve(query, use_cache=False)
-        except Exception as e:
-            resolved = {'status': 'error', 'query': query, 'error': str(e)}
-        row['location_edit'] = query
-        row['location'] = resolved
-        row['location_source'] = 'reference'
-        return
-
-    if alias:
-        row['location_edit'] = alias.get('location_text') or hint
-        if alias.get('lat') is not None and alias.get('lon') is not None:
-            row['location'] = {
-                'status': 'confirmed',
-                'query': row['location_edit'],
-                'label': alias.get('label') or row['location_edit'],
-                'lat': alias.get('lat'),
-                'lon': alias.get('lon'),
-            }
-        else:
-            try:
-                row['location'] = service.resolve(row['location_edit'], use_cache=False)
-            except Exception as e:
-                row['location'] = {'status': 'error', 'query': row['location_edit'], 'error': str(e)}
-        row['location_source'] = 'database'
-        return
-
-    row['location_edit'] = hint
-    if not hint:
-        row['location'] = {'status': 'missing', 'query': ''}
-        row['location_source'] = 'automatic'
-        return
-    try:
-        row['location'] = service.resolve(hint)
-    except Exception as e:
-        row['location'] = {'status': 'error', 'query': hint, 'error': str(e)}
-    row['location_source'] = 'automatic'
-
-
 def enrich_rows(rows):
-    service = LocationService()
+    """Apply saved corrections without calling ORS for every uploaded row."""
+    activities, locations, reservations = db.preload_corrections() if db.configured() else ({}, {}, {})
+
     for row in rows:
-        apply_saved_activity(row)
-        resolve_row_location(row, service)
+        original_activity = row.get('activity', '')
+        row['original_activity'] = original_activity
+        reference = str(row.get('reference') or '')
+        ref_fix = reservations.get(reference)
+
+        if ref_fix and ref_fix.get('activity'):
+            row['activity'] = ref_fix['activity']
+            row['activity_source'] = 'reference'
+        else:
+            alias = activities.get(db.norm_key(original_activity)) if original_activity and original_activity != 'ONBEKEND' else None
+            if alias:
+                row['activity'] = alias
+                row['activity_source'] = 'database'
+            else:
+                row['activity_source'] = 'automatic'
+
+        hint = clean_location_hint(row.get('location_hint', ''))
+        row['location_hint'] = hint
+        row['original_location_hint'] = hint
+        loc_alias = locations.get(db.norm_key(hint)) if hint else None
+        corrected_text = (ref_fix or {}).get('location_text') if ref_fix else None
+
+        if corrected_text:
+            row['location_edit'] = corrected_text
+            row['location_source'] = 'reference'
+            row['location'] = {'status': 'saved', 'query': corrected_text, 'label': corrected_text}
+        elif loc_alias:
+            row['location_edit'] = loc_alias.get('location_text') or hint
+            row['location_source'] = 'database'
+            if loc_alias.get('lat') is not None and loc_alias.get('lon') is not None:
+                row['location'] = {
+                    'status': 'confirmed',
+                    'query': row['location_edit'],
+                    'label': loc_alias.get('label') or row['location_edit'],
+                    'lat': loc_alias.get('lat'),
+                    'lon': loc_alias.get('lon'),
+                }
+            else:
+                row['location'] = {'status': 'saved', 'query': row['location_edit'], 'label': row['location_edit']}
+        else:
+            row['location_edit'] = hint
+            row['location_source'] = 'automatic'
+            row['location'] = {
+                'status': 'needs_review' if hint else 'missing',
+                'query': hint,
+                'label': '',
+            }
+
     return rows
 
 
@@ -133,40 +115,21 @@ def save_corrections():
         return render_home(error='Database is nog niet gekoppeld of bereikbaar.')
 
     count = int(request.form.get('row_count', '0') or 0)
-    saved = 0
-    warnings = []
-    service = LocationService()
-
+    items = []
     for i in range(count):
-        reference = (request.form.get(f'reference_{i}') or '').strip()
-        original_activity = (request.form.get(f'original_activity_{i}') or '').strip()
-        original_location_hint = (request.form.get(f'original_location_hint_{i}') or '').strip()
-        activity = (request.form.get(f'activity_{i}') or '').strip()
-        location_text = (request.form.get(f'location_{i}') or '').strip()
+        items.append({
+            'reference': (request.form.get(f'reference_{i}') or '').strip(),
+            'original_activity': (request.form.get(f'original_activity_{i}') or '').strip(),
+            'original_location_hint': (request.form.get(f'original_location_hint_{i}') or '').strip(),
+            'activity': (request.form.get(f'activity_{i}') or '').strip(),
+            'location_text': (request.form.get(f'location_{i}') or '').strip(),
+        })
 
-        if reference:
-            db.upsert_reservation_correction(reference, activity, location_text)
-
-        if original_activity and original_activity != 'ONBEKEND' and activity and activity != original_activity:
-            db.upsert_activity_alias(original_activity, activity)
-
-        if original_location_hint and location_text:
-            resolved = None
-            try:
-                candidate = service.resolve(location_text, use_cache=False)
-                if candidate.get('status') not in {'missing', 'needs_api', 'unresolved', 'error'}:
-                    resolved = candidate
-                else:
-                    warnings.append(f'{location_text}: niet betrouwbaar geocoded')
-            except Exception:
-                warnings.append(f'{location_text}: geocoding mislukt')
-            db.upsert_location_alias(original_location_hint, location_text, resolved)
-        saved += 1
-
-    msg = f'{saved} regels opgeslagen. JP Planner gebruikt deze correcties bij volgende uploads.'
-    if warnings:
-        msg += ' Let op: ' + '; '.join(warnings[:5])
-    return render_home(message=msg)
+    try:
+        db.save_corrections_batch(items)
+        return render_home(message=f'{len(items)} regels opgeslagen. JP Planner gebruikt deze correcties bij volgende uploads.')
+    except Exception as e:
+        return render_home(error=f'Opslaan mislukt: {e}')
 
 
 @app.post('/route-test')

@@ -1,17 +1,22 @@
-# JP Planner v3
+# JP Planner v3.1
 
-Deze versie voegt permanente PostgreSQL-opslag toe voor handmatige correcties na een Smart Event Manager import.
+Deze versie voorkomt time-outs bij grote uploads.
 
-## Render environment variables
+## Belangrijkste wijziging
+- Uploaden doet **geen geocoding per opdracht** meer.
+- Spel en locatie/adres worden direct bewerkbaar getoond.
+- Opgeslagen correcties worden in PostgreSQL onthouden.
+- Alle correcties worden in één database-transactie opgeslagen.
+- OpenRouteService wordt alleen gebruikt voor expliciete routetests (en later voor de aparte route-validatie/planningsstap).
+
+## Environment variables
 - `ORS_API_KEY`
 - `FLASK_SECRET_KEY`
-- `DATABASE_URL` (Internal Database URL van de Render Postgres database)
+- `DATABASE_URL`
 
-## Nieuwe flow
-1. Upload PDF/XLSX.
-2. Controleer de bewerkbare kolommen **Spel** en **Locatie / adres**.
-3. Pas fouten handmatig aan.
-4. Klik **Correcties opslaan**.
-5. Correcties worden in PostgreSQL bewaard en bij volgende uploads opnieuw gebruikt.
+## Render
+Build command:
+`pip install -r requirements.txt`
 
-De tabellen worden automatisch aangemaakt bij eerste gebruik.
+Start command:
+`gunicorn app:app`
