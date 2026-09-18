@@ -1,5 +1,5 @@
 import math
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 from datetime import datetime, timedelta
 
 from location_service import LocationService
@@ -64,21 +64,37 @@ def _is_own_transport(code):
 
 
 def _resolve_many(texts):
+    """Resolve locations conservatively.
+
+    Render/ORS can throttle or time out when many geocode requests are fired in
+    parallel. Resolve sequentially, reuse persistent DB/local cache via
+    LocationService, and retry transient failures. One bad location is returned
+    as unresolved rather than aborting the entire planning run.
+    """
     service = LocationService()
     unique = list(dict.fromkeys(t for t in texts if t))
     out = {}
-    with ThreadPoolExecutor(max_workers=min(8, max(1, len(unique)))) as pool:
-        futures = {pool.submit(service.resolve, text): text for text in unique}
-        for fut in as_completed(futures):
-            text = futures[fut]
+    for text in unique:
+        last_error = None
+        for attempt in range(3):
             try:
-                item = fut.result()
+                item = service.resolve(text, use_cache=True)
                 if item.get('lat') is not None and item.get('lon') is not None:
                     out[text] = item
-                else:
-                    out[text] = {'status': item.get('status', 'unresolved'), 'query': text}
+                    last_error = None
+                    break
+                last_error = item.get('status', 'unresolved')
+                # Missing/unresolved is normally not transient; only retry API-ish states.
+                if last_error not in {'error', 'needs_api'}:
+                    break
             except Exception as exc:
-                out[text] = {'status': 'error', 'query': text, 'error': str(exc)}
+                last_error = str(exc)
+            if attempt < 2:
+                time.sleep(0.6 * (attempt + 1))
+        if text not in out:
+            out[text] = {'status': 'unresolved', 'query': text, 'error': last_error or ''}
+        # Gentle pacing avoids bursts against the ORS geocoder on uncached imports.
+        time.sleep(0.15)
     return out
 
 
@@ -118,12 +134,17 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, overrides=Non
     idx = {t: i for i, t in enumerate(valid_texts)}
     coords = [[resolved[t]['lon'], resolved[t]['lat']] for t in valid_texts]
 
-    if not coords:
-        raise RuntimeError('Geen enkele locatie kon worden opgelost voor routeberekening.')
-
-    matrix = ORSClient().matrix(coords)
-    durations = matrix.get('durations') or []
-    distances = matrix.get('distances') or []
+    durations = []
+    distances = []
+    if coords:
+        try:
+            matrix = ORSClient().matrix(coords)
+            durations = matrix.get('durations') or []
+            distances = matrix.get('distances') or []
+        except Exception as exc:
+            warnings.append(f"Route-matrix kon niet worden berekend: {exc}")
+    else:
+        warnings.append('Geen enkele locatie kon automatisch worden opgelost. Controleer de gemarkeerde locaties en herbereken.')
 
     def travel(a, b):
         if a not in idx or b not in idx:
@@ -199,6 +220,27 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, overrides=Non
         special = _special_flags(activity)
         location = job.get('location_text', '')
         override = overrides.get(str(job.get('reference') or ''))
+
+        # A single unresolved job location must never block the rest of the day.
+        # Keep it visible as a manual action item and continue planning all other jobs.
+        location_result = resolved.get(location, {})
+        if not location or location_result.get('lat') is None or location_result.get('lon') is None:
+            reason = f"⚠️ LOCATIE CONTROLEREN: '{location or 'geen locatie'}' kon niet automatisch worden opgelost voor routeberekening."
+            plan_jobs.append({
+                **job,
+                'vehicle_code': override or '',
+                'travel_minutes': None,
+                'travel_km': None,
+                'departure_time': '',
+                'arrival_time': required_arrival.strftime('%H:%M'),
+                'available_time': available_after.strftime('%H:%M'),
+                'status': 'location_problem',
+                'warnings': [reason],
+                'material_problem': False,
+                'location_problem': True,
+            })
+            warnings.append(f"Ref. {job.get('reference') or '?'}: {reason}")
+            continue
 
         # 1) First try the fixed company fleet, unless own transport was explicitly chosen.
         candidates = []
@@ -279,6 +321,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, overrides=Non
                 'status': status,
                 'warnings': [reason],
                 'material_problem': status == 'material_problem',
+                'location_problem': False,
             })
             warnings.append(f"Ref. {job.get('reference') or '?'}: {reason}")
             continue
@@ -303,6 +346,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, overrides=Non
                 'status': 'planned_own_transport',
                 'warnings': job_warnings,
                 'material_problem': False,
+                'location_problem': False,
                 'own_transport': True,
                 'pickup_depot_name': depot['name'],
                 'pickup_depot_address': depot['address'],
@@ -371,6 +415,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, overrides=Non
                         'status': 'material_problem',
                         'warnings': [reason],
                         'material_problem': True,
+                        'location_problem': False,
                     })
                     warnings.append(f"Ref. {job.get('reference') or '?'}: {reason}")
                     continue
@@ -396,6 +441,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, overrides=Non
             'status': 'planned',
             'warnings': job_warnings,
             'material_problem': any('MATERIAALPROBLEEM' in w for w in job_warnings),
+            'location_problem': False,
             'own_transport': False,
         }
         plan_jobs.append(entry)
@@ -459,7 +505,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, overrides=Non
     for service_number, route in enumerate(vehicle_routes, start=1):
         route['service_number'] = service_number
 
-    unplanned_jobs = [j for j in plan_jobs if j.get('status') in {'unplanned', 'material_problem'}]
+    unplanned_jobs = [j for j in plan_jobs if j.get('status') in {'unplanned', 'material_problem', 'location_problem'}]
 
     return {
         'jobs': plan_jobs,
@@ -469,6 +515,8 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, overrides=Non
         'warnings': warnings,
         'total_distance_km': round(total_km, 1),
         'total_drive_minutes': round(total_drive),
-        'unplanned_count': sum(1 for j in plan_jobs if j.get('status') in {'unplanned', 'material_problem'}),
+        'unplanned_count': sum(1 for j in plan_jobs if j.get('status') in {'unplanned', 'material_problem', 'location_problem'}),
         'material_problem_count': sum(1 for j in plan_jobs if j.get('material_problem')),
+        'location_problem_count': sum(1 for j in plan_jobs if j.get('location_problem')),
+        'resolved_location_count': sum(1 for t in node_texts if resolved.get(t, {}).get('lat') is not None),
     }

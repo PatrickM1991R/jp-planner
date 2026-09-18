@@ -70,6 +70,12 @@ def ensure_schema():
                     quantity INTEGER NOT NULL DEFAULT 0, standard_in_vehicle BOOLEAN NOT NULL DEFAULT FALSE,
                     notes TEXT NOT NULL DEFAULT ''
                 )""")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS geocode_cache (
+                    location_key TEXT PRIMARY KEY, location_text TEXT NOT NULL,
+                    label TEXT, lat DOUBLE PRECISION NOT NULL, lon DOUBLE PRECISION NOT NULL,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )""")
         conn.commit()
     seed_logistics()
 
@@ -167,3 +173,49 @@ def save_corrections_batch(items):
 
 
 def norm_key(text): return _norm(text)
+
+
+def get_geocode_cache(location_text):
+    """Return a persisted geocode result for an exact normalized location text."""
+    if not configured() or not location_text:
+        return None
+    ensure_schema()
+    key = _norm(location_text)
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT location_text,label,lat,lon FROM geocode_cache WHERE location_key=%s",
+                (key,),
+            )
+            row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def save_geocode_cache(location_text, label, lat, lon):
+    """Persist a successful geocode so future planning runs do not need ORS geocoding."""
+    if not configured() or not location_text or lat is None or lon is None:
+        return
+    ensure_schema()
+    key = _norm(location_text)
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO geocode_cache(location_key,location_text,label,lat,lon,updated_at)
+                   VALUES (%s,%s,%s,%s,%s,NOW())
+                   ON CONFLICT(location_key) DO UPDATE SET
+                     location_text=EXCLUDED.location_text,label=EXCLUDED.label,
+                     lat=EXCLUDED.lat,lon=EXCLUDED.lon,updated_at=NOW()""",
+                (key, location_text.strip(), label or location_text.strip(), float(lat), float(lon)),
+            )
+        conn.commit()
+
+
+def geocode_cache_count():
+    if not configured():
+        return 0
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS n FROM geocode_cache")
+            row = cur.fetchone()
+    return int(row['n']) if row else 0

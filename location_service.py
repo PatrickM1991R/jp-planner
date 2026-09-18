@@ -6,6 +6,11 @@ from pathlib import Path
 
 import requests
 
+try:
+    import db
+except Exception:
+    db = None
+
 ORS_BASE = "https://api.openrouteservice.org"
 CACHE_PATH = Path(os.getenv("LOCATION_CACHE_PATH", "data/locations.json"))
 _LOCK = threading.Lock()
@@ -101,6 +106,21 @@ class LocationService:
 
         k = _key(query)
         if use_cache:
+            # PostgreSQL cache is authoritative on Render because the local filesystem
+            # is ephemeral across deploys/restarts.
+            if db is not None and getattr(db, "configured", lambda: False)():
+                try:
+                    persistent = db.get_geocode_cache(query)
+                    if persistent:
+                        return {
+                            "status": "db_cached",
+                            "query": query,
+                            "label": persistent.get("label") or query,
+                            "lat": float(persistent["lat"]),
+                            "lon": float(persistent["lon"]),
+                        }
+                except Exception:
+                    pass
             cache = load_cache()
             if k in cache:
                 item = dict(cache[k])
@@ -127,6 +147,11 @@ class LocationService:
                 cache = load_cache()
                 cache[k] = record
                 save_cache(cache)
+            if db is not None and getattr(db, "configured", lambda: False)():
+                try:
+                    db.save_geocode_cache(query, record.get("label"), record.get("lat"), record.get("lon"))
+                except Exception:
+                    pass
         result = dict(record)
         result.update({"status": "geocoded", "query": query})
         return result
