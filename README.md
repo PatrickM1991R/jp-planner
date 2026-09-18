@@ -20,3 +20,6 @@ Build command:
 
 Start command:
 `gunicorn app:app`
+
+## v3.2 - Receptielijst als blokken
+De parser herkent nu Smart Event Manager `Receptielijst voorzieningen` als reserveringsblokken. Een blok start bij de regel met tijd + klant/locatie + Ref en loopt door tot het volgende blok. Het spel wordt primair bepaald uit de expliciete `Voorziening`-regels en aanvullend uit de reserveringsomschrijving. Vrije notities tellen niet mee als spel, zodat bijvoorbeeld `BIJ SLECHT WEER VR GAME MEE` niet onterecht een extra activiteit maakt.

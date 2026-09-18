@@ -11,7 +11,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 <body><div class="wrap">
 <div class="card">
 <h1>JP Planner</h1>
-<p class="muted">Opdrachten herkennen, corrigeren, onthouden en autoroutes berekenen.</p>
+<p class="muted">Opdrachten herkennen, corrigeren, onthouden en autoroutes berekenen.</p><p><a href="/fleet"><strong>Wagenpark & logistiek beheren →</strong></a></p>
 {% if ors_configured %}<div class="ok">OpenRouteService is gekoppeld — profiel: <strong>driving-car</strong>.</div>{% else %}<div class="warn">ORS_API_KEY ontbreekt.</div>{% endif %}
 {% if db_configured %}<div class="ok">Database is gekoppeld — correcties kunnen permanent worden opgeslagen.</div>{% else %}<div class="warn">DATABASE_URL ontbreekt of database is niet bereikbaar.</div>{% endif %}
 {% if error %}<div class="error">{{error}}</div>{% endif %}
@@ -52,9 +52,9 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 <form action="/save-corrections" method="post">
 <input type="hidden" name="row_count" value="{{rows|length}}">
 <div class="actions"><button type="submit">Correcties opslaan</button><span class="small">Opgeslagen correcties worden bij een volgende upload automatisch toegepast.</span></div>
-<div class="scroll"><table><tr><th>Datum</th><th>Tijd</th><th>Aantal</th><th>Spel</th><th>Locatie / adres</th><th>Status</th><th>Gevonden locatie</th><th>Omschrijving</th><th>Ref.</th></tr>
+<div class="scroll"><table><tr><th>Datum</th><th>Tijd</th><th>Aantal</th><th>Medewerkers</th><th>Spel</th><th>Locatie / adres</th><th>Status</th><th>Gevonden locatie</th><th>Omschrijving</th><th>Ref.</th></tr>
 {% for r in rows %}<tr>
-<td>{{r.date}}</td><td>{{r.start}}–{{r.end}}</td><td>{{r.participants}}</td>
+<td>{{r.date}}</td><td>{{r.start}}–{{r.end}}</td><td>{{r.participants}}</td><td><input style="width:70px" type="number" min="1" name="staff_{{loop.index0}}" value="{{r.staff_required}}"><span class="source">bron: {{r.staff_source}}{% if r.staff_source == 'rule' %} (30+ = 2){% endif %}</span></td>
 <td>
 <input class="edit-input" type="text" name="activity_{{loop.index0}}" value="{{r.activity}}">
 <input type="hidden" name="original_activity_{{loop.index0}}" value="{{r.original_activity}}">
