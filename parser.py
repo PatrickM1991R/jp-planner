@@ -53,7 +53,7 @@ def ns(t):
 
 def _append_unique(target, items):
     for item in items:
-        if item not in target:
+        if item and item not in target:
             target.append(item)
 
 
@@ -78,9 +78,9 @@ def extract_location_hint(desc):
         r'\bbij\s+',
         r'\bin\s+',
     ]:
-        m = list(re.finditer(marker, text, re.I))
-        if m:
-            hint = text[m[-1].end():].strip(' ,.-')
+        matches = list(re.finditer(marker, text, re.I))
+        if matches:
+            hint = text[matches[-1].end():].strip(' ,.-')
             hint = re.split(r'\s+Aantal\s+pers\s*:', hint, maxsplit=1, flags=re.I)[0]
             hint = re.split(r'\s+:\s*INK\d+', hint, maxsplit=1, flags=re.I)[0]
             hint = re.split(r'\s+kostenplaats\s+\d+', hint, maxsplit=1, flags=re.I)[0]
@@ -103,23 +103,62 @@ def extract_pdf_text(f):
 
 
 def _is_reception_block_start(line):
-    """Booking header: two times followed by non-numeric text.
+    """A booking header starts with two times followed by non-numeric text.
 
-    Provision rows also start with two times, but the third field is a numeric count.
-    Those MUST remain inside the current booking block.
+    Provision rows also start with two times, but their third field is a numeric
+    participant count. Those rows belong to the current booking block.
     """
     m = TIME_PREFIX_RE.match(ns(line))
     if not m:
         return False
     rest = m.group(3).strip()
-    first = rest.split(' ', 1)[0] if rest else ''
-    return bool(first) and not re.fullmatch(r'[0-9]+(?:-[0-9]+)?', first)
+    if not rest:
+        return False
+    first = rest.split(' ', 1)[0]
+    return not bool(re.fullmatch(r'[0-9]+(?:-[0-9]+)?', first))
 
 
 def _clean_summary_line(line):
     text = ns(line)
     text = PEOPLE_RE.sub('', text)
     return ns(text).strip(' ,-')
+
+
+def _strip_contact_tail(text):
+    """Remove obvious contact/reference tails from relation text when possible."""
+    text = ns(text)
+    text = REF_ANY_RE.sub('', text)
+    return text.strip(' ,-')
+
+
+def _extract_relation_location(relation, summary):
+    """Choose a stable location hint for the editable location field.
+
+    Prefer the booking summary ('... bij Beachclub Lemmer'). If that contains no
+    location phrase, fall back to the relation header but remove contact/name tails.
+    """
+    hint = extract_location_hint(summary)
+    if hint:
+        return hint
+
+    rel = ns(relation)
+    if not rel:
+        return ''
+
+    # Common SEM relation header separators: ' - Dhr.', ' - Mevr.', etc.
+    rel = re.split(r'\s+-\s+(?:Dhr\.|Mevr\.|De heer|Mw\.|Dhr|Mevr)\b', rel, maxsplit=1, flags=re.I)[0]
+    return ns(rel)
+
+
+def _looks_like_summary(candidate):
+    if not candidate:
+        return False
+    if recognize_activities(candidate):
+        return True
+    return bool(re.search(
+        r'\b(bij partner|op eigen locatie|op locatie|op inloop|bij|in)\b',
+        candidate, re.I
+    ))
 
 
 def _build_reception_row(block, curdate):
@@ -130,11 +169,9 @@ def _build_reception_row(block, curdate):
     hm = TIME_PREFIX_RE.match(first)
     if not hm:
         return None
-    start, end, first_rest = hm.groups()
+    start, end, _ = hm.groups()
 
-    # Find the reference. In this report it can be on the first line or on a
-    # separate wrapped line. Everything up to and including that line belongs
-    # to the relation/contact header; the booking description starts after it.
+    # Reference can be on the first line or on a wrapped follow-up line.
     ref_idx = None
     reference = ''
     for i, line in enumerate(block):
@@ -144,6 +181,7 @@ def _build_reception_row(block, curdate):
             ref_idx = i
             break
 
+    # Everything through the reference line forms the relation/contact header.
     header_end = ref_idx if ref_idx is not None else 0
     header_parts = []
     for i in range(0, header_end + 1):
@@ -151,17 +189,16 @@ def _build_reception_row(block, curdate):
         if i == 0:
             tm = TIME_PREFIX_RE.match(text)
             text = tm.group(3) if tm else text
-        text = REF_ANY_RE.sub('', text).strip(' ,-')
+        text = _strip_contact_tail(text)
         if text:
             header_parts.append(text)
     relation = ns(' '.join(header_parts))
 
-    # Content begins after the reference line. If no reference was extracted,
-    # use the first line after the time/header line.
+    # Content begins after the reference line (or after the first header line).
     content_start = (ref_idx + 1) if ref_idx is not None else 1
     content = [ns(x) for x in block[content_start:] if ns(x)]
 
-    # Participant count can live on the summary line or on its own line.
+    # Participant count: explicit 'Aantal pers' first, provision count second.
     participants = ''
     for line in content:
         pm = PEOPLE_RE.search(line)
@@ -169,7 +206,7 @@ def _build_reception_row(block, curdate):
             participants = pm.group(1)
             break
 
-    # Explicit provision rows are authoritative for the games.
+    # Explicit provision rows are authoritative for activity names.
     provisions = []
     activities = []
     for line in content:
@@ -178,17 +215,20 @@ def _build_reception_row(block, curdate):
             continue
         p_start, p_end, p_count, p_name = pmatch.groups()
         p_name = ns(p_name)
-        provisions.append({'start': p_start, 'end': p_end, 'count': p_count, 'name': p_name})
+        provisions.append({
+            'start': p_start,
+            'end': p_end,
+            'count': p_count,
+            'name': p_name,
+        })
         recognized = recognize_activities(p_name)
         _append_unique(activities, recognized if recognized else [p_name])
 
     if not participants and provisions:
         participants = provisions[0]['count']
 
-    # Find the booking summary. Contact names can wrap to the next PDF line
-    # even after 'Ref:', e.g. '... Dhr. Joost Ref: 11169' followed by
-    # 'Rodenburg'. Prefer the first line that looks like an actual booking
-    # description (known activity or a location phrase such as 'bij ...').
+    # Find one booking summary line. Notes after that are not allowed to create
+    # extra activities (e.g. 'BIJ SLECHT WEER VR GAME MEE').
     summary = ''
     fallback_summary = ''
     for line in content:
@@ -201,21 +241,19 @@ def _build_reception_row(block, curdate):
             continue
         if not fallback_summary:
             fallback_summary = candidate
-        looks_like_summary = bool(recognize_activities(candidate)) or bool(re.search(
-            r'\b(bij partner|op eigen locatie|op locatie|op inloop|bij|in)\b',
-            candidate, re.I
-        ))
-        if looks_like_summary:
+        if _looks_like_summary(candidate):
             summary = candidate
             break
     if not summary:
         summary = fallback_summary
 
-    # Summary may mention an additional game not printed as a provision on the
-    # same page, so add recognized activities without duplicating them.
+    # The booking summary may name an extra real activity that is not printed as
+    # its own provision row (for example 'Boogschieten en Western Games').
+    # Add activities from the chosen summary line only; notes are deliberately
+    # excluded so text such as 'BIJ SLECHT WEER VR GAME MEE' cannot add a game.
     _append_unique(activities, recognize_activities(summary))
 
-    # Notes are the remaining non-provision content after the summary.
+    # Remaining non-provision lines become notes.
     notes = []
     summary_consumed = False
     for line in content:
@@ -229,6 +267,8 @@ def _build_reception_row(block, curdate):
             continue
         notes.append(candidate)
 
+    location_hint = _extract_relation_location(relation, summary)
+
     return {
         'date': curdate or '',
         'start': start,
@@ -239,7 +279,7 @@ def _build_reception_row(block, curdate):
         'reference': reference,
         'activities': activities,
         'activity': ' + '.join(activities) if activities else 'ONBEKEND',
-        'location_hint': extract_location_hint(summary),
+        'location_hint': location_hint,
         'provisions': provisions,
         'raw_text': ns(' '.join(block)),
         'notes': ns(' '.join(notes)),
@@ -247,7 +287,12 @@ def _build_reception_row(block, curdate):
 
 
 def parse_reception_text(text):
-    """Parse Smart Event Manager 'Receptielijst voorzieningen' by booking blocks."""
+    """Parse Smart Event Manager 'Receptielijst voorzieningen' by booking block.
+
+    One booking starts at a header row (two times + non-numeric text) and keeps
+    consuming wrapped lines, notes, 'Aantal pers', and one or more provision rows
+    until the next booking header or date line.
+    """
     lines = [ns(x) for x in (text or '').splitlines()]
     rows = []
     curdate = None
@@ -267,13 +312,15 @@ def parse_reception_text(text):
         if line == 'Receptielijst voorzieningen':
             continue
         if line.startswith('Smart Event Manager'):
-            # A booking can continue across the PDF page break.
+            # A booking can continue over a PDF page break.
             continue
+
         d = parse_date_line(line)
         if d:
             finish_block()
             curdate = d
             continue
+
         if line.lower().startswith('vanaf t/m'):
             continue
 
@@ -349,11 +396,7 @@ def parse_sem_text(text):
 
 
 def parse_pdf(f):
-    """Detect Smart Event Manager report type from one extracted text pass.
-
-    Using multiple markers makes detection robust even if the PDF title itself
-    is omitted by pdfplumber on a particular Render/Python version.
-    """
+    """Detect Smart Event Manager report type from one extracted text pass."""
     text = extract_pdf_text(f)
     low = text.lower()
     is_reception = (
