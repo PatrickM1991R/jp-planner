@@ -1,12 +1,13 @@
-JP Planner v6.5 timeout patch
+JP Planner v6.7 - slimme locatieherkenning
 
-Overschrijf in GitHub alleen:
-- planning_engine.py
+Overschrijf in GitHub:
 - location_service.py
+- ors_client.py
 
-Wijzigingen:
-- geen sleep/retry-lussen meer tijdens planning
-- maximaal 4 locatie-opzoekingen parallel
-- ORS geocode korte connect/read timeout
-- mislukte locatie blokkeert planning niet
-- succesvolle geocodes blijven in PostgreSQL-cache staan
+Nieuw in v6.7:
+- gebruikt api.heigit.org voor OpenRouteService/Pelias;
+- herkent locatienamen zoals "Beachclub Lemmer" en "De Beren Emmen" als zoekopdracht;
+- als een bedrijfsnaam voor een echt adres staat, probeert de planner ook het adres apart;
+- postcode + straat + plaats krijgen extra gewicht bij de keuze van een resultaat;
+- meerdere geocoder-resultaten worden gescoord op naam, plaats, postcode en overeenkomst;
+- gevonden coördinaten blijven in de bestaande databasecache bewaard.

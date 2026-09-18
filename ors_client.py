@@ -1,7 +1,7 @@
 import os
 import requests
 
-BASE = 'https://api.openrouteservice.org'
+BASE = 'https://api.heigit.org/openrouteservice'
 
 
 class ORSError(RuntimeError):
