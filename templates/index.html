@@ -11,9 +11,9 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 <body><div class="wrap">
 <div class="card">
 <h1>JP Planner</h1>
-<p class="muted">Opdrachten herkennen, corrigeren, onthouden en autoroutes berekenen.</p><p><a href="/fleet"><strong>Wagenpark & logistiek beheren →</strong></a></p>
+<p class="muted">Opdrachten herkennen, corrigeren, onthouden en autoroutes berekenen.</p><p><a href="/fleet"><strong>Wagenpark & logistiek beheren →</strong></a> · <a href="/personnel"><strong>Personeel beheren →</strong></a></p>
 {% if ors_configured %}<div class="ok">OpenRouteService is gekoppeld — profiel: <strong>driving-car</strong>.</div>{% else %}<div class="warn">ORS_API_KEY ontbreekt.</div>{% endif %}
-{% if db_configured %}<div class="ok">Database is gekoppeld — correcties kunnen permanent worden opgeslagen.</div>{% else %}<div class="warn">DATABASE_URL ontbreekt of database is niet bereikbaar.</div>{% endif %}
+{% if db_configured %}<div class="ok">Database is gekoppeld — correcties kunnen permanent worden opgeslagen.</div>{% else %}<div class="warn">DATABASE_URL ontbreekt of database is niet bereikbaar.</div>{% endif %}{% if personnel_count %}<div class="ok">Personeelsregister gekoppeld — <strong>{{personnel_count}}</strong> actieve medewerker(s).</div>{% else %}<div class="warn">Nog geen personeel geïmporteerd. Upload het personeelsbestand via <a href="/personnel">Personeel beheren</a>.</div>{% endif %}
 {% if error %}<div class="error">{{error}}</div>{% endif %}
 {% if message %}<div class="ok">{{message}}</div>{% endif %}
 </div>
@@ -54,7 +54,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 <div class="actions"><button type="submit">Correcties opslaan</button><button type="submit" formaction="/generate-logistics" formmethod="post">Genereer logistieke planning</button><span class="small">De planning gebruikt je huidige Spel-, Locatie- en Medewerkersvelden.</span></div>
 <div class="scroll"><table><tr><th>Datum</th><th>Tijd</th><th>Aantal</th><th>Medewerkers</th><th>Spel</th><th>Locatie / adres</th><th>Status</th><th>Gevonden locatie</th><th>Omschrijving</th><th>Ref.</th></tr>
 {% for r in rows %}<tr>
-<td>{{r.date}}<input type="hidden" name="date_{{loop.index0}}" value="{{r.date}}"></td><td>{{r.start}}–{{r.end}}<input type="hidden" name="start_{{loop.index0}}" value="{{r.start}}"><input type="hidden" name="end_{{loop.index0}}" value="{{r.end}}"><input type="hidden" name="setup_{{loop.index0}}" value="30"><input type="hidden" name="cleanup_{{loop.index0}}" value="30"></td><td>{{r.participants}}<input type="hidden" name="participants_{{loop.index0}}" value="{{r.participants}}"></td><td><input style="width:70px" type="number" min="1" name="staff_{{loop.index0}}" value="{{r.staff_required}}"><span class="source">bron: {{r.staff_source}}{% if r.staff_source == 'rule' %} (30+ = 2){% endif %}</span></td>
+<td>{{r.date}}<input type="hidden" name="date_{{loop.index0}}" value="{{r.date}}"></td><td>{{r.start}}–{{r.end}}<input type="hidden" name="start_{{loop.index0}}" value="{{r.start}}"><input type="hidden" name="end_{{loop.index0}}" value="{{r.end}}"><input type="hidden" name="setup_{{loop.index0}}" value="30"><input type="hidden" name="cleanup_{{loop.index0}}" value="30"></td><td>{{r.participants}}<input type="hidden" name="participants_{{loop.index0}}" value="{{r.participants}}"></td><td><input style="width:70px" type="number" min="1" name="staff_{{loop.index0}}" value="{{r.staff_required}}"><span class="source">bron: {{r.staff_source}}{% if r.staff_source == 'rule' %} (1 per 30 pers.){% endif %}</span></td>
 <td>
 <input class="edit-input" type="text" name="activity_{{loop.index0}}" value="{{r.activity}}">
 <input type="hidden" name="original_activity_{{loop.index0}}" value="{{r.original_activity}}">

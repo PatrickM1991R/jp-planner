@@ -14,7 +14,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
   <div class="topline">
     <div>
       <h1>Dienstenplanning & routes</h1>
-      <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a></p>
+      <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a> · <a href="/personnel">Personeel beheren</a></p>
       <p class="muted">Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen → terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur. Smart Event Manager blijft leidend voor spelstart en speleinde.</p>
     </div>
   </div>
@@ -26,7 +26,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
     <div><span class="small">Totale rijtijd</span><strong>{{plan.total_drive_minutes}} min</strong></div>
     <div><span class="small">Diensten</span><strong>{{plan.vehicle_routes|length}}</strong></div>
     <div><span class="small">Niet ingepland</span><strong>{{plan.unplanned_count}}</strong></div>
-    <div><span class="small">Materiaalproblemen</span><strong>{{plan.material_problem_count}}</strong></div>
+    <div><span class="small">Materiaalproblemen</span><strong>{{plan.material_problem_count}}</strong></div><div><span class="small">Personeelsproblemen</span><strong>{{plan.staff_problem_count or 0}}</strong></div>
   </div>
 </div>
 
@@ -49,7 +49,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
     <div class="service-title">
       <div class="date-head">{{r.date}}</div>
       <h2>Dienst {{r.service_number}} — {{r.vehicle_code}}{% if r.own_transport %} · eigen vervoer{% endif %}</h2>
-      <div class="meta"><strong>{{r.depot_name}}</strong> — {{r.depot_address}}</div>
+      <div class="meta"><strong>{{r.depot_name}}</strong> — {{r.depot_address}}</div>{% if r.staff_names %}<div class="meta"><strong>Personeel dienst:</strong> {{r.staff_names|join(", ")}}</div>{% endif %}
     </div>
     <div class="service-stats">
       <div><span class="small">Dienst</span><strong>{{r.first_departure}}–{{r.return_time}}</strong><span class="small">{{r.duty_duration}}</span></div>
@@ -98,7 +98,17 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
       <div>
         <div class="small">Bezetting</div>
         <h3>{{j.participants}} pers.</h3>
-        <div>{{j.staff_required}} medewerker(s)</div>
+        <div class="fieldline"><label>Aantal</label><input type="number" min="1" name="staff_{{i}}" value="{{j.staff_required}}"></div>
+        {% if plan.employees %}
+          {% for n in range(j.staff_required) %}
+          <div class="fieldline"><label>Med. {{n+1}}</label><select name="staff_person_{{i}}_{{n}}">
+            <option value="">Automatisch{% if j.staff_names and n < j.staff_names|length %} — {{j.staff_names[n]}}{% endif %}</option>
+            {% for e in plan.employees %}<option value="{{e.name}}" {% if j.staff_manual and j.staff_names and n < j.staff_names|length and j.staff_names[n]==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}
+          </select></div>
+          {% endfor %}
+          {% if j.staff_names %}<div class="small"><strong>Voorstel:</strong> {{j.staff_names|join(', ')}}</div>{% endif %}
+          {% for w in j.staff_warnings %}<div class="warn">{{w}}</div>{% endfor %}
+        {% else %}<div class="warn">Nog geen personeel geïmporteerd.</div>{% endif %}
       </div>
       <div>
         <div class="small">Rit naar deze klus</div>
@@ -111,7 +121,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
   </div>
   <input type="hidden" name="date_{{i}}" value="{{j.date}}">
   <input type="hidden" name="participants_{{i}}" value="{{j.participants}}">
-  <input type="hidden" name="staff_{{i}}" value="{{j.staff_required}}">
+  
   <input type="hidden" name="activity_{{i}}" value="{{j.activity}}">
   <input type="hidden" name="location_{{i}}" value="{{j.location_text}}">
   <input type="hidden" name="reference_{{i}}" value="{{j.reference}}">
@@ -131,13 +141,13 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
       <div><div class="small">Werkblok</div><div class="fieldline"><label>Opbouw</label><input type="number" min="0" name="setup_{{i}}" value="{{j.setup_minutes}}"> min</div><div class="fieldline"><label>Opruimen</label><input type="number" min="0" name="cleanup_{{i}}" value="{{j.cleanup_minutes}}"> min</div><input type="hidden" name="start_{{i}}" value="{{j.start}}"><input type="hidden" name="end_{{i}}" value="{{j.end}}"></div>
       <div><div class="small">Klus</div><h3>{{j.activity}}</h3><div>{{j.location_text}}</div><div class="small">Ref. {{j.reference}}</div></div>
       <div><div class="small">Bus / vervoer handmatig</div><select name="override_{{i}}"><option value="">Automatisch</option>{% for v in plan.vehicles %}<option value="{{v.code}}">{{v.code}}</option>{% endfor %}</select></div>
-      <div><div class="small">Bezetting</div><h3>{{j.participants}} pers.</h3><div>{{j.staff_required}} medewerker(s)</div></div>
+      <div><div class="small">Bezetting</div><h3>{{j.participants}} pers.</h3><div class="fieldline"><label>Aantal</label><input type="number" min="1" name="staff_{{i}}" value="{{j.staff_required}}"></div>{% if plan.employees %}{% for n in range(j.staff_required) %}<div class="fieldline"><label>Med. {{n+1}}</label><select name="staff_person_{{i}}_{{n}}"><option value="">Automatisch{% if j.staff_names and n < j.staff_names|length %} — {{j.staff_names[n]}}{% endif %}</option>{% for e in plan.employees %}<option value="{{e.name}}" {% if j.staff_manual and j.staff_names and n < j.staff_names|length and j.staff_names[n]==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}</select></div>{% endfor %}{% if j.staff_names %}<div class="small"><strong>Voorstel:</strong> {{j.staff_names|join(', ')}}</div>{% endif %}{% for w in j.staff_warnings %}<div class="warn">{{w}}</div>{% endfor %}{% else %}<div class="warn">Nog geen personeel geïmporteerd.</div>{% endif %}</div>
       <div>{% if j.material_problem %}<div class="bad"><strong>❗ MATERIAALPROBLEEM</strong></div>{% else %}<div class="bad">Niet ingepland</div>{% endif %}{% for w in j.warnings %}<div class="warn">{{w}}</div>{% endfor %}</div>
     </div>
   </div>
   <input type="hidden" name="date_{{i}}" value="{{j.date}}">
   <input type="hidden" name="participants_{{i}}" value="{{j.participants}}">
-  <input type="hidden" name="staff_{{i}}" value="{{j.staff_required}}">
+  
   <input type="hidden" name="activity_{{i}}" value="{{j.activity}}">
   <input type="hidden" name="location_{{i}}" value="{{j.location_text}}">
   <input type="hidden" name="reference_{{i}}" value="{{j.reference}}">

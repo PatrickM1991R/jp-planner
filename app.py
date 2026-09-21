@@ -6,6 +6,8 @@ from location_service import LocationService, LocationServiceError, clean_locati
 from ors_client import ORSClient, ORSError
 from parser import parse_upload
 from planning_engine import build_logistics_plan
+from personnel_engine import assign_staff_to_plan
+from staff_parser import parse_personnel_workbook
 
 load_dotenv(); app=Flask(__name__); app.secret_key=os.getenv('FLASK_SECRET_KEY','dev-change-me')
 
@@ -48,7 +50,7 @@ def enrich_rows(rows):
     return rows
 
 def render_home(**kwargs):
-    d={'rows':None,'error':None,'message':None,'route_result':None,'ors_configured':LocationService().configured,'db_configured':db_status()}; d.update(kwargs); return render_template('index.html',**d)
+    d={'rows':None,'error':None,'message':None,'route_result':None,'ors_configured':LocationService().configured,'db_configured':db_status(),'personnel_count':db.personnel_count() if db.configured() else 0}; d.update(kwargs); return render_template('index.html',**d)
 
 @app.get('/')
 def index(): return render_home()
@@ -74,14 +76,19 @@ def _jobs_from_form(form):
     count=int(form.get('row_count','0') or 0)
     jobs=[]
     overrides={}
+    staff_overrides={}
     for i in range(count):
         ref=(form.get(f'reference_{i}') or '').strip()
+        try:
+            staff_required=max(1,int(form.get(f'staff_{i}') or 1))
+        except ValueError:
+            staff_required=1
         jobs.append({
             'date':(form.get(f'date_{i}') or '').strip(),
             'start':(form.get(f'start_{i}') or '').strip(),
             'end':(form.get(f'end_{i}') or '').strip(),
             'participants':(form.get(f'participants_{i}') or '').strip(),
-            'staff_required':int(form.get(f'staff_{i}') or 1),
+            'staff_required':staff_required,
             'setup_minutes':max(0,int(form.get(f'setup_{i}') or 30)),
             'cleanup_minutes':max(0,int(form.get(f'cleanup_{i}') or 30)),
             'activity':(form.get(f'activity_{i}') or '').strip(),
@@ -90,18 +97,50 @@ def _jobs_from_form(form):
         })
         ov=(form.get(f'override_{i}') or '').strip()
         if ov and ref: overrides[ref]=ov
-    return jobs,overrides
+        manual_names=[]
+        for n in range(staff_required):
+            name=(form.get(f'staff_person_{i}_{n}') or '').strip()
+            if name:
+                manual_names.append(name)
+        if manual_names:
+            staff_overrides[ref or str(i)] = manual_names
+    return jobs,overrides,staff_overrides
 
 @app.post('/generate-logistics')
 def generate_logistics():
     try:
-        jobs,overrides=_jobs_from_form(request.form)
+        jobs,overrides,staff_overrides=_jobs_from_form(request.form)
         if not jobs: return render_home(error='Geen opdrachten ontvangen voor de planning.')
         depots,vehicles,stock,resources=db.get_logistics()
         plan=build_logistics_plan(jobs,depots,vehicles,stock,resources,overrides)
+        employees,_=db.get_personnel() if db.configured() else ([],None)
+        plan=assign_staff_to_plan(plan,employees,staff_overrides) if employees else plan
+        plan.setdefault('employees',employees)
+        plan.setdefault('staff_problem_count',0)
         return render_template('planning.html',plan=plan)
     except Exception as e:
         return render_home(error=f'Planning genereren mislukt: {e}')
+
+
+@app.get('/personnel')
+def personnel():
+    try:
+        employees,last_import=db.get_personnel()
+        return render_template('personnel.html',employees=employees,last_import=last_import,error=None,message=request.args.get('message'))
+    except Exception as e:
+        return render_template('personnel.html',employees=[],last_import=None,error=str(e),message=None)
+
+@app.post('/personnel/upload')
+def personnel_upload():
+    f=request.files.get('file')
+    if not f or not f.filename:
+        return redirect(url_for('personnel',message='Kies eerst een Excel-bestand.'))
+    try:
+        rows,_=parse_personnel_workbook(f.stream)
+        unique=db.save_personnel_import(rows,f.filename)
+        return redirect(url_for('personnel',message=f'{unique} medewerker(s) bijgewerkt. Nieuwe gegevens gelden voor nieuwe en herberekende planningen.'))
+    except Exception as e:
+        return redirect(url_for('personnel',message=f'Import mislukt: {e}'))
 
 @app.get('/fleet')
 def fleet():

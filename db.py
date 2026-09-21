@@ -219,3 +219,120 @@ def geocode_cache_count():
             cur.execute("SELECT COUNT(*) AS n FROM geocode_cache")
             row = cur.fetchone()
     return int(row['n']) if row else 0
+
+# --- Personnel -------------------------------------------------------------
+
+def _ensure_personnel_schema(cur):
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS employees (
+            id BIGSERIAL PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            driving_license TEXT NOT NULL DEFAULT '',
+            own_transport TEXT NOT NULL DEFAULT 'Onbekend',
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            notes TEXT NOT NULL DEFAULT '',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )""")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS employee_availability (
+            employee_id BIGINT REFERENCES employees(id) ON DELETE CASCADE,
+            week_mode TEXT NOT NULL DEFAULT '',
+            slot TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'onbekend',
+            PRIMARY KEY(employee_id, week_mode, slot)
+        )""")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS employee_skills (
+            employee_id BIGINT REFERENCES employees(id) ON DELETE CASCADE,
+            activity TEXT NOT NULL,
+            skill_status TEXT NOT NULL DEFAULT 'Onbekend',
+            PRIMARY KEY(employee_id, activity)
+        )""")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS personnel_imports (
+            id BIGSERIAL PRIMARY KEY,
+            imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            filename TEXT,
+            row_count INTEGER NOT NULL DEFAULT 0
+        )""")
+
+
+def save_personnel_import(rows, filename=''):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            imported_names = set()
+            for item in rows:
+                name = (item.get('name') or '').strip()
+                if not name:
+                    continue
+                imported_names.add(name.casefold())
+                cur.execute("""
+                    INSERT INTO employees(name,driving_license,own_transport,active,notes,updated_at)
+                    VALUES (%s,%s,%s,%s,%s,NOW())
+                    ON CONFLICT(name) DO UPDATE SET
+                        driving_license=EXCLUDED.driving_license,
+                        own_transport=EXCLUDED.own_transport,
+                        active=EXCLUDED.active,
+                        notes=EXCLUDED.notes,
+                        updated_at=NOW()
+                    RETURNING id
+                """, (name, item.get('driving_license',''), item.get('own_transport','Onbekend'),
+                      bool(item.get('active', True)), item.get('notes','')))
+                employee_id = cur.fetchone()['id']
+                week_mode = (item.get('week_mode') or '').upper()
+                # One imported profile replaces that employee's same week profile.
+                cur.execute("DELETE FROM employee_availability WHERE employee_id=%s AND week_mode=%s", (employee_id, week_mode))
+                for slot, status in (item.get('availability') or {}).items():
+                    cur.execute("""
+                        INSERT INTO employee_availability(employee_id,week_mode,slot,status)
+                        VALUES (%s,%s,%s,%s)
+                    """, (employee_id, week_mode, slot, status))
+                # Skills are employee-level. A later row (e.g. EVEN/ONEVEN) safely upserts the same values.
+                for activity, status in (item.get('skills') or {}).items():
+                    cur.execute("""
+                        INSERT INTO employee_skills(employee_id,activity,skill_status)
+                        VALUES (%s,%s,%s)
+                        ON CONFLICT(employee_id,activity) DO UPDATE SET skill_status=EXCLUDED.skill_status
+                    """, (employee_id, activity, status))
+            cur.execute("INSERT INTO personnel_imports(filename,row_count) VALUES (%s,%s)", (filename, len(rows)))
+        conn.commit()
+    return len(imported_names)
+
+
+def get_personnel():
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("SELECT id,name,driving_license,own_transport,active,notes,updated_at FROM employees ORDER BY name")
+            employees = [dict(r) for r in cur.fetchall()]
+            cur.execute("SELECT employee_id,week_mode,slot,status FROM employee_availability ORDER BY employee_id,week_mode,slot")
+            availability = [dict(r) for r in cur.fetchall()]
+            cur.execute("SELECT employee_id,activity,skill_status FROM employee_skills ORDER BY employee_id,activity")
+            skills = [dict(r) for r in cur.fetchall()]
+            cur.execute("SELECT imported_at,filename,row_count FROM personnel_imports ORDER BY imported_at DESC LIMIT 1")
+            last_import = cur.fetchone()
+    avail_map = {}
+    for r in availability:
+        avail_map.setdefault(r['employee_id'], {}).setdefault(r['week_mode'], {})[r['slot']] = r['status']
+    skill_map = {}
+    for r in skills:
+        skill_map.setdefault(r['employee_id'], {})[r['activity']] = r['skill_status']
+    for e in employees:
+        e['availability'] = avail_map.get(e['id'], {})
+        e['skills'] = skill_map.get(e['id'], {})
+    return employees, (dict(last_import) if last_import else None)
+
+
+def personnel_count():
+    if not configured():
+        return 0
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("SELECT COUNT(*) AS n FROM employees WHERE active=TRUE")
+            row = cur.fetchone()
+    return int(row['n']) if row else 0

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Personeel - JP Planner</title>
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wrap{max-width:1450px;margin:32px auto;padding:0 24px}.card{background:#fff;border-radius:14px;padding:22px;box-shadow:0 2px 14px rgba(0,0,0,.08);margin-bottom:18px}.muted,.small{color:#667085}.small{font-size:12px}.ok{background:#dcfce7;padding:10px;border-radius:8px}.warn{background:#fef3c7;padding:10px;border-radius:8px}button{padding:10px 16px;border:0;border-radius:8px;background:#1f2937;color:white;font-weight:700;cursor:pointer}input[type=file]{padding:9px;border:1px solid #d0d5dd;border-radius:8px}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}th{background:#f9fafb}.badge{display:inline-block;padding:3px 7px;border-radius:999px;background:#eef2ff;font-size:11px}.skills{max-width:760px;line-height:1.65}
+</style>
+</head>
+<body><div class="wrap">
+<div class="card">
+<h1>Personeel</h1>
+<p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark</a></p>
+<p class="muted">Upload steeds hetzelfde personeelsbestand. Bestaande namen worden bijgewerkt, nieuwe medewerkers toegevoegd. Medewerkers die niet in een nieuwe upload staan worden niet automatisch verwijderd.</p>
+{% if message %}<div class="ok">{{message}}</div>{% endif %}
+{% if error %}<div class="warn">{{error}}</div>{% endif %}
+{% if last_import %}<p class="small">Laatste import: {{last_import.imported_at}} · {{last_import.filename}} · {{last_import.row_count}} rij(en)</p>{% endif %}
+</div>
+<div class="card">
+<h2>Personeelsbestand bijwerken</h2>
+<form action="/personnel/upload" method="post" enctype="multipart/form-data">
+<input type="file" name="file" accept=".xlsx,.xlsm" required>
+<button>Personeel importeren / bijwerken</button>
+</form>
+</div>
+<div class="card">
+<h2>{{employees|length}} medewerkers in database</h2>
+<div class="scroll"><table>
+<tr><th>Naam</th><th>Actief</th><th>Rijbewijs</th><th>Eigen vervoer</th><th>Weekprofielen</th><th>Vaardigheden = Ja</th><th>Opmerking</th></tr>
+{% for e in employees %}
+<tr>
+<td><strong>{{e.name}}</strong></td>
+<td>{{'Ja' if e.active else 'Nee'}}</td>
+<td>{{e.driving_license or 'Onbekend'}}</td>
+<td>{{e.own_transport or 'Onbekend'}}</td>
+<td>{% if e.availability %}{% for mode,slots in e.availability.items() %}<span class="badge">{{mode or 'VAST'}}</span> {% endfor %}{% else %}—{% endif %}</td>
+<td class="skills">{% set ns=namespace(first=true) %}{% for activity,status in e.skills.items() %}{% if status|lower in ['ja','jaj','yes'] %}{% if not ns.first %}, {% endif %}{{activity}}{% set ns.first=false %}{% endif %}{% endfor %}{% if ns.first %}—{% endif %}</td>
+<td>{{e.notes}}</td>
+</tr>
+{% endfor %}
+</table></div>
+</div>
+</div></body></html>
