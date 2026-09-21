@@ -16,9 +16,16 @@ def db_status():
     except Exception: return False
 
 def default_staff(participants):
+    """Default staffing: 1 staff member per started block of 30 participants.
+
+    1-30 -> 1, 31-60 -> 2, 61-90 -> 3, etc.
+    The value remains manually editable and saved per reservation.
+    """
     try:
-        n=int(str(participants).split('-')[0]); return 2 if n>=30 else 1
-    except Exception: return 1
+        count = int(participants or 0)
+    except (TypeError, ValueError):
+        count = 0
+    return max(1, (count + 29) // 30)
 
 def enrich_rows(rows):
     activities,locations,reservations=db.preload_corrections() if db.configured() else ({},{},{})

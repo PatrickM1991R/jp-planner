@@ -1,13 +1,15 @@
-JP Planner v6.7 - slimme locatieherkenning
+JP Planner v6.8 - staffing rule patch
 
-Overschrijf in GitHub:
-- location_service.py
-- ors_client.py
+Changes:
+- Default staffing is now 1 staff member per started block of 30 participants.
+  1-30 = 1
+  31-60 = 2
+  61-90 = 3
+  91-120 = 4
+  etc.
+- The staff field remains manually editable on the assignments screen.
+- A manually saved staff count remains authoritative for that reservation/reference.
 
-Nieuw in v6.7:
-- gebruikt api.heigit.org voor OpenRouteService/Pelias;
-- herkent locatienamen zoals "Beachclub Lemmer" en "De Beren Emmen" als zoekopdracht;
-- als een bedrijfsnaam voor een echt adres staat, probeert de planner ook het adres apart;
-- postcode + straat + plaats krijgen extra gewicht bij de keuze van een resultaat;
-- meerdere geocoder-resultaten worden gescoord op naam, plaats, postcode en overeenkomst;
-- gevonden coördinaten blijven in de bestaande databasecache bewaard.
+Upload/overwrite only:
+- app.py
+- templates/index.html
