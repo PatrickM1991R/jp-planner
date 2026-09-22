@@ -168,6 +168,7 @@ def _jobs_from_form(form):
             staff_required=max(1,int(form.get(f'staff_{i}') or 1))
         except ValueError:
             staff_required=1
+        transport_employee=(form.get(f'extra_car_employee_{i}') or '').strip()
         jobs.append({
             'date':(form.get(f'date_{i}') or '').strip(),
             'start':(form.get(f'start_{i}') or '').strip(),
@@ -179,6 +180,7 @@ def _jobs_from_form(form):
             'activity':(form.get(f'activity_{i}') or '').strip(),
             'location_text':(form.get(f'location_{i}') or '').strip(),
             'reference':ref,
+            'transport_employee':transport_employee,
         })
         ov=(form.get(f'override_{i}') or '').strip()
         if ov and ref: overrides[ref]=ov
@@ -187,6 +189,12 @@ def _jobs_from_form(form):
             name=(form.get(f'staff_person_{i}_{n}') or '').strip()
             if name:
                 manual_names.append(name)
+        # When an employee supplies the extra car, that person is pinned to the
+        # assignment as a staff member as well. The personnel engine still checks
+        # availability, skills, overlap and Own transport = Ja and shows warnings.
+        if ov.startswith('Extra auto medewerker') and transport_employee:
+            if transport_employee not in manual_names:
+                manual_names.insert(0, transport_employee)
         if manual_names:
             staff_overrides[ref or str(i)] = manual_names
     return jobs,overrides,staff_overrides
