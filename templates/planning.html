@@ -6,6 +6,10 @@
 <title>Dienstenplanning - JP Planner</title>
 <style>
 body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wrap{max-width:1500px;margin:28px auto;padding:0 22px}.card{background:#fff;border-radius:14px;padding:22px;box-shadow:0 2px 14px rgba(0,0,0,.08);margin-bottom:18px}.topline{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap}.summary{display:flex;gap:34px;flex-wrap:wrap}.summary strong{font-size:26px;display:block}.small,.muted{color:#667085;font-size:12px}.warn{background:#fef3c7;padding:10px;border-radius:8px;margin:6px 0}.bad{background:#fee2e2;padding:10px;border-radius:8px}.ok{background:#dcfce7;padding:10px;border-radius:8px}.pill{display:inline-block;padding:4px 9px;border-radius:999px;background:#eef2ff;font-size:12px;margin-right:5px}.service{border:2px solid #e5e7eb}.service-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid #e5e7eb}.service-title h2{margin:0 0 5px}.service-stats{display:flex;gap:22px;flex-wrap:wrap}.service-stats strong{display:block;font-size:20px}.job{padding:16px 0;border-bottom:1px solid #eceff3}.job:last-child{border-bottom:0}.job-grid{display:grid;grid-template-columns:140px 180px minmax(220px,1.3fr) minmax(210px,1fr) 95px minmax(220px,1fr);gap:14px;align-items:start}.job h3{margin:0 0 5px;font-size:16px}.fieldline{margin:4px 0}.fieldline label{display:inline-block;min-width:68px;font-size:12px;color:#667085}input[type=time],input[type=number],select{padding:7px;border:1px solid #d0d5dd;border-radius:7px;background:white}input[type=time]{width:100px}input[type=number]{width:58px}select{width:100%;max-width:280px}button{padding:11px 17px;border:0;border-radius:8px;background:#1f2937;color:white;cursor:pointer;font-weight:700}.buttonbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.route-arrow{font-size:20px;color:#667085;margin-right:6px}.unplanned{border:2px solid #fecaca}.material{border:2px solid #f59e0b}.meta{line-height:1.45}.manual-note{background:#eff6ff;border-radius:8px;padding:10px 12px;margin-top:10px}.date-head{font-size:13px;color:#667085}.service-path{margin:12px 0 0;padding:10px 12px;background:#f8fafc;border-radius:8px;line-height:1.7}.service-path span{white-space:nowrap}@media(max-width:1050px){.job-grid{grid-template-columns:1fr 1fr}.job-grid>div:nth-child(3),.job-grid>div:nth-child(4),.job-grid>div:nth-child(6){grid-column:span 2}}@media(max-width:650px){.job-grid{display:block}.job-grid>div{margin-bottom:12px}}
+
+/* Visueel dagplanbord */
+.planboard-wrap{overflow-x:auto;padding-bottom:8px}.planboard{min-width:1180px}.planboard-day{margin-top:22px;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff}.planboard-day:first-child{margin-top:0}.pb-day-head{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb}.pb-day-head h3{margin:0;font-size:20px}.pb-day-summary{font-size:12px;color:#667085}.pb-header,.pb-row{display:grid;grid-template-columns:230px minmax(900px,1fr)}.pb-header{background:#fff;border-bottom:1px solid #e5e7eb;position:sticky;top:0;z-index:4}.pb-label-head{padding:10px 14px;font-weight:700;color:#475467;border-right:1px solid #e5e7eb}.pb-hours{position:relative;height:42px;background-image:linear-gradient(to right,#e5e7eb 1px,transparent 1px);background-size:5.5555556% 100%}.pb-hour{position:absolute;top:9px;transform:translateX(-50%);font-size:11px;color:#667085;white-space:nowrap}.pb-row{min-height:76px;border-bottom:1px solid #eef2f6}.pb-row:last-child{border-bottom:0}.pb-game{padding:14px;border-right:1px solid #e5e7eb;background:#fbfcfd}.pb-game strong{display:block;font-size:14px}.pb-game span{display:block;margin-top:4px;font-size:11px;color:#667085}.pb-track{position:relative;min-height:76px;background-image:linear-gradient(to right,#eef2f6 1px,transparent 1px);background-size:5.5555556% 100%}.pb-block{position:absolute;top:8px;min-width:58px;height:60px;border-radius:8px;padding:6px 8px;box-sizing:border-box;overflow:hidden;border-left:4px solid rgba(0,0,0,.22);font-size:10px;line-height:1.2;box-shadow:0 1px 3px rgba(0,0,0,.12);cursor:default}.pb-block:hover{z-index:10;height:auto;min-height:60px;overflow:visible;box-shadow:0 5px 18px rgba(0,0,0,.20)}.pb-ok{background:#bbf7d0}.pb-warn{background:#fde68a}.pb-bad{background:#fecaca}.pb-neutral{background:#e5e7eb}.pb-time{font-weight:800;font-size:11px}.pb-main{font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pb-meta{margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pb-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:#667085}.pb-dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}.pb-section-title{margin:0 0 5px;font-size:26px}.planboard-card-title{border-top:4px solid #1f2937}.pb-section-note{margin:0;color:#667085;font-size:12px}@media(max-width:700px){.pb-header,.pb-row{grid-template-columns:180px minmax(900px,1fr)}}
+
 </style>
 </head>
 <body>
@@ -13,7 +17,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 <div class="card">
   <div class="topline">
     <div>
-      <h1>Dienstenplanning & routes</h1>
+      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v7.5 actief</span></h1>
       <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a> · <a href="/personnel">Personeel beheren</a></p>
       <p class="muted">Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen → terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur. Smart Event Manager blijft leidend voor spelstart en speleinde.</p>
     </div>
@@ -102,11 +106,11 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
         {% if plan.employees %}
           {% for n in range(j.staff_required) %}
           <div class="fieldline"><label>Med. {{n+1}}</label><select name="staff_person_{{i}}_{{n}}">
-            <option value="">Automatisch{% if j.staff_names and n < j.staff_names|length %} — {{j.staff_names[n]}}{% endif %}</option>
-            {% for e in plan.employees %}<option value="{{e.name}}" {% if j.staff_manual and j.staff_names and n < j.staff_names|length and j.staff_names[n]==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}
+            <option value="">Automatisch kiezen</option>
+            {% for e in plan.employees %}<option value="{{e.name}}" {% if j.staff_names and n < j.staff_names|length and j.staff_names[n]==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}
           </select></div>
           {% endfor %}
-          {% if j.staff_names %}<div class="small"><strong>Voorstel:</strong> {{j.staff_names|join(', ')}}</div>{% endif %}
+          {% if j.staff_names %}<div class="small"><strong>Collega('s):</strong> {{j.staff_names|join(', ')}}</div>{% endif %}
           {% for w in j.staff_warnings %}<div class="warn">{{w}}</div>{% endfor %}
         {% else %}<div class="warn">Nog geen personeel geïmporteerd.</div>{% endif %}
       </div>
@@ -141,7 +145,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
       <div><div class="small">Werkblok</div><div class="fieldline"><label>Opbouw</label><input type="number" min="0" name="setup_{{i}}" value="{{j.setup_minutes}}"> min</div><div class="fieldline"><label>Opruimen</label><input type="number" min="0" name="cleanup_{{i}}" value="{{j.cleanup_minutes}}"> min</div><input type="hidden" name="start_{{i}}" value="{{j.start}}"><input type="hidden" name="end_{{i}}" value="{{j.end}}"></div>
       <div><div class="small">Klus</div><h3>{{j.activity}}</h3><div>{{j.location_text}}</div><div class="small">Ref. {{j.reference}}</div></div>
       <div><div class="small">Bus / vervoer handmatig</div><select name="override_{{i}}"><option value="">Automatisch</option>{% for v in plan.vehicles %}<option value="{{v.code}}">{{v.code}}</option>{% endfor %}</select></div>
-      <div><div class="small">Bezetting</div><h3>{{j.participants}} pers.</h3><div class="fieldline"><label>Aantal</label><input type="number" min="1" name="staff_{{i}}" value="{{j.staff_required}}"></div>{% if plan.employees %}{% for n in range(j.staff_required) %}<div class="fieldline"><label>Med. {{n+1}}</label><select name="staff_person_{{i}}_{{n}}"><option value="">Automatisch{% if j.staff_names and n < j.staff_names|length %} — {{j.staff_names[n]}}{% endif %}</option>{% for e in plan.employees %}<option value="{{e.name}}" {% if j.staff_manual and j.staff_names and n < j.staff_names|length and j.staff_names[n]==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}</select></div>{% endfor %}{% if j.staff_names %}<div class="small"><strong>Voorstel:</strong> {{j.staff_names|join(', ')}}</div>{% endif %}{% for w in j.staff_warnings %}<div class="warn">{{w}}</div>{% endfor %}{% else %}<div class="warn">Nog geen personeel geïmporteerd.</div>{% endif %}</div>
+      <div><div class="small">Bezetting</div><h3>{{j.participants}} pers.</h3><div class="fieldline"><label>Aantal</label><input type="number" min="1" name="staff_{{i}}" value="{{j.staff_required}}"></div>{% if plan.employees %}{% for n in range(j.staff_required) %}<div class="fieldline"><label>Med. {{n+1}}</label><select name="staff_person_{{i}}_{{n}}"><option value="">Automatisch kiezen</option>{% for e in plan.employees %}<option value="{{e.name}}" {% if j.staff_names and n < j.staff_names|length and j.staff_names[n]==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}</select></div>{% endfor %}{% if j.staff_names %}<div class="small"><strong>Collega('s):</strong> {{j.staff_names|join(', ')}}</div>{% endif %}{% for w in j.staff_warnings %}<div class="warn">{{w}}</div>{% endfor %}{% else %}<div class="warn">Nog geen personeel geïmporteerd.</div>{% endif %}</div>
       <div>{% if j.material_problem %}<div class="bad"><strong>❗ MATERIAALPROBLEEM</strong></div>{% else %}<div class="bad">Niet ingepland</div>{% endif %}{% for w in j.warnings %}<div class="warn">{{w}}</div>{% endfor %}</div>
     </div>
   </div>
@@ -155,8 +159,108 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 </div>
 {% endif %}
 
+<div class="card planboard-card-title">
+  <div class="topline">
+    <div>
+      <h2 class="pb-section-title">Dagplanning op tijdsbalk</h2>
+      <p class="pb-section-note">Hieronder staat dezelfde planning als tijdsbalk. Per klus zie je direct het spel, tijdstip, ingeplande collega('s), voertuig en locatie. Ook niet-ingedeelde klussen blijven zichtbaar.</p>
+      <div class="pb-legend">
+        <span><i class="pb-dot" style="background:#bbf7d0"></i>Volledig gepland</span>
+        <span><i class="pb-dot" style="background:#fde68a"></i>Controle / waarschuwing</span>
+        <span><i class="pb-dot" style="background:#fecaca"></i>Niet compleet ingepland</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card planboard-wrap">
+  <div class="planboard">
+  {% if plan.jobs %}
+  {% for date_group in plan.jobs|groupby('date') %}
+    <section class="planboard-day" data-planboard-day>
+      <div class="pb-day-head">
+        <h3>{{date_group.grouper}}</h3>
+        <div class="pb-day-summary">{{date_group.list|length}} klus{% if date_group.list|length != 1 %}sen{% endif %}</div>
+      </div>
+      <div class="pb-header">
+        <div class="pb-label-head">Spel / activiteit</div>
+        <div class="pb-hours">
+          {% for hour in range(8,27) %}
+            <span class="pb-hour" style="left:{{((hour-8)/18*100)}}%">{{'%02d' % (hour if hour < 24 else hour-24)}}:00</span>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% for activity_group in date_group.list|groupby('activity') %}
+      <div class="pb-row">
+        <div class="pb-game">
+          <strong>{{activity_group.grouper}}</strong>
+          <span>{{activity_group.list|length}} klus{% if activity_group.list|length != 1 %}sen{% endif %}</span>
+        </div>
+        <div class="pb-track">
+          {% for j in activity_group.list %}
+            {% set block_class = 'pb-ok' %}
+            {% if j.material_problem or j.staff_problem or j.status in ['unplanned','not_planned'] %}
+              {% set block_class = 'pb-bad' %}
+            {% elif j.warnings or j.staff_warnings %}
+              {% set block_class = 'pb-warn' %}
+            {% endif %}
+            <div class="pb-block {{block_class}}"
+                 data-start="{{j.start}}" data-end="{{j.end}}"
+                 title="{{j.activity}} · {{j.location_text}}">
+              <div class="pb-time">{{j.start}}–{{j.end}}</div>
+              <div class="pb-main">{% if j.staff_names %}{{j.staff_names|join(', ')}}{% else %}Nog geen medewerker{% endif %}</div>
+              <div class="pb-meta">{% if j.vehicle_code %}{{j.vehicle_code}}{% else %}Nog geen voertuig{% endif %}</div>
+              <div class="pb-meta">{{j.location_text}}</div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </section>
+  {% endfor %}
+  {% else %}
+    <div class="warn">Er zijn geen klussen beschikbaar om op het dagplanbord te tonen.</div>
+  {% endif %}
+  </div>
+</div>
+
+<script>
+(function(){
+  const START = 8 * 60;
+  const END = 26 * 60;
+  const SPAN = END - START;
+  function toMinutes(value){
+    if(!value) return null;
+    const parts = value.split(':');
+    if(parts.length < 2) return null;
+    let h = Number(parts[0]), m = Number(parts[1]);
+    if(Number.isNaN(h) || Number.isNaN(m)) return null;
+    if(h < 8) h += 24;
+    return h * 60 + m;
+  }
+  document.querySelectorAll('.pb-block').forEach(block => {
+    let s = toMinutes(block.dataset.start);
+    let e = toMinutes(block.dataset.end);
+    if(s === null || e === null) return;
+    if(e <= s) e += 24 * 60;
+    const visibleStart = Math.max(s, START);
+    const visibleEnd = Math.min(e, END);
+    if(visibleEnd <= START || visibleStart >= END){
+      block.style.display = 'none';
+      return;
+    }
+    block.style.left = (((visibleStart - START) / SPAN) * 100) + '%';
+    block.style.width = Math.max(((visibleEnd - visibleStart) / SPAN) * 100, 1.7) + '%';
+  });
+})();
+</script>
+
 <div class="card"><div class="buttonbar"><button type="submit">Herbereken volledige planning</button><span class="muted">Alle handmatige voertuig- en tijdkeuzes worden opnieuw gecontroleerd op haalbaarheid, reistijd en materiaal.</span></div></div>
 </form>
+
+
+
 </div>
 </body>
 </html>
