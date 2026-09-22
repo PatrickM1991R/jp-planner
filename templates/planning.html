@@ -10,6 +10,9 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 /* Visueel dagplanbord */
 .planboard-wrap{overflow-x:auto;padding-bottom:8px}.planboard{min-width:1180px}.planboard-day{margin-top:22px;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff}.planboard-day:first-child{margin-top:0}.pb-day-head{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb}.pb-day-head h3{margin:0;font-size:20px}.pb-day-summary{font-size:12px;color:#667085}.pb-header,.pb-row{display:grid;grid-template-columns:230px minmax(900px,1fr)}.pb-header{background:#fff;border-bottom:1px solid #e5e7eb;position:sticky;top:0;z-index:4}.pb-label-head{padding:10px 14px;font-weight:700;color:#475467;border-right:1px solid #e5e7eb}.pb-hours{position:relative;height:42px;background-image:linear-gradient(to right,#e5e7eb 1px,transparent 1px);background-size:5.5555556% 100%}.pb-hour{position:absolute;top:9px;transform:translateX(-50%);font-size:11px;color:#667085;white-space:nowrap}.pb-row{min-height:76px;border-bottom:1px solid #eef2f6}.pb-row:last-child{border-bottom:0}.pb-game{padding:14px;border-right:1px solid #e5e7eb;background:#fbfcfd}.pb-game strong{display:block;font-size:14px}.pb-game span{display:block;margin-top:4px;font-size:11px;color:#667085}.pb-track{position:relative;min-height:76px;background-image:linear-gradient(to right,#eef2f6 1px,transparent 1px);background-size:5.5555556% 100%}.pb-block{position:absolute;top:8px;min-width:58px;height:60px;border-radius:8px;padding:6px 8px;box-sizing:border-box;overflow:hidden;border-left:4px solid rgba(0,0,0,.22);font-size:10px;line-height:1.2;box-shadow:0 1px 3px rgba(0,0,0,.12);cursor:default}.pb-block:hover{z-index:10;height:auto;min-height:60px;overflow:visible;box-shadow:0 5px 18px rgba(0,0,0,.20)}.pb-ok{background:#bbf7d0}.pb-warn{background:#fde68a}.pb-bad{background:#fecaca}.pb-neutral{background:#e5e7eb}.pb-time{font-weight:800;font-size:11px}.pb-main{font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pb-meta{margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pb-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:#667085}.pb-dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}.pb-section-title{margin:0 0 5px;font-size:26px}.planboard-card-title{border-top:4px solid #1f2937}.pb-section-note{margin:0;color:#667085;font-size:12px}@media(max-width:700px){.pb-header,.pb-row{grid-template-columns:180px minmax(900px,1fr)}}
 
+/* Dag / week schakelaar + weekplanbord */
+.view-switch{display:flex;gap:8px;margin-top:14px}.view-switch button{background:#eef2f6;color:#344054;border:1px solid #d0d5dd}.view-switch button.active{background:#1f2937;color:#fff;border-color:#1f2937}.planning-view{display:none}.planning-view.active{display:block}.weekboard-wrap{overflow-x:auto}.weekboard{min-width:1180px;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff}.wb-head{display:grid;grid-template-columns:84px repeat(var(--days),minmax(150px,1fr));background:#f8fafc;border-bottom:1px solid #e5e7eb}.wb-head>div{padding:10px 8px;border-right:1px solid #e5e7eb;text-align:center;font-weight:700}.wb-head>div:first-child{text-align:left}.wb-body{display:grid;grid-template-columns:84px repeat(var(--days),minmax(150px,1fr));height:900px;position:relative}.wb-times{position:relative;border-right:1px solid #e5e7eb;background:#fbfcfd}.wb-time{position:absolute;right:9px;transform:translateY(-50%);font-size:11px;color:#667085}.wb-day{position:relative;border-right:1px solid #e5e7eb;background-image:linear-gradient(to bottom,#eef2f6 1px,transparent 1px);background-size:100% 5.5555556%}.wb-event{position:absolute;left:5px;right:5px;border-radius:8px;padding:6px 7px;box-sizing:border-box;border-left:4px solid rgba(0,0,0,.22);font-size:10px;line-height:1.2;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.10)}.wb-event:hover{z-index:20;overflow:visible;height:auto!important;min-height:42px;box-shadow:0 5px 18px rgba(0,0,0,.20)}.wb-event .wb-title{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wb-event .wb-meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}.wb-note{margin-top:10px;color:#667085;font-size:12px}.view-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+
 </style>
 </head>
 <body>
@@ -17,7 +20,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 <div class="card">
   <div class="topline">
     <div>
-      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v7.6 actief</span></h1>
+      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v7.7 actief</span></h1>
       <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a> · <a href="/personnel">Personeel beheren</a></p>
       <p class="muted">Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen → terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur. Smart Event Manager blijft leidend voor spelstart en speleinde.</p>
     </div>
@@ -171,10 +174,15 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
         <span><i class="pb-dot" style="background:#fde68a"></i>Controle / waarschuwing</span>
         <span><i class="pb-dot" style="background:#fecaca"></i>Niet compleet ingepland</span>
       </div>
+      <div class="view-switch">
+        <button type="button" class="active" data-view-button="day">Dagplanning</button>
+        <button type="button" data-view-button="week">Weekplanning</button>
+      </div>
     </div>
   </div>
 </div>
 
+<div id="dayPlanningView" class="planning-view active">
 <div class="card planboard-wrap">
   <div class="planboard">
   {% if plan.jobs %}
@@ -226,6 +234,57 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
   {% endif %}
   </div>
 </div>
+</div>
+
+<div id="weekPlanningView" class="planning-view">
+  <div class="card">
+    <div class="view-heading">
+      <div>
+        <h2 style="margin:0 0 5px">Weekplanning</h2>
+        <div class="muted">Alle dagen naast elkaar. De verticale positie is de echte speltijd uit Smart Event Manager.</div>
+      </div>
+    </div>
+    <div class="weekboard-wrap" style="margin-top:14px">
+      {% set week_dates = plan.jobs|groupby('date')|list %}
+      {% if week_dates %}
+      <div class="weekboard" style="--days:{{week_dates|length}}">
+        <div class="wb-head">
+          <div>Tijd</div>
+          {% for dg in week_dates %}<div>{{dg.grouper}}</div>{% endfor %}
+        </div>
+        <div class="wb-body">
+          <div class="wb-times">
+            {% for hour in range(8,27) %}
+              <span class="wb-time" style="top:{{((hour-8)/18*100)}}%">{{'%02d' % (hour if hour < 24 else hour-24)}}:00</span>
+            {% endfor %}
+          </div>
+          {% for dg in week_dates %}
+          <div class="wb-day" data-week-day>
+            {% for j in dg.list %}
+              {% set block_class = 'pb-ok' %}
+              {% if j.material_problem or j.staff_problem or j.status in ['unplanned','not_planned'] %}
+                {% set block_class = 'pb-bad' %}
+              {% elif j.warnings or j.staff_warnings %}
+                {% set block_class = 'pb-warn' %}
+              {% endif %}
+              <div class="wb-event {{block_class}}" data-start="{{j.start}}" data-end="{{j.end}}" title="{{j.activity}} · {{j.location_text}}">
+                <div class="wb-title">{{j.start}}–{{j.end}} · {{j.activity}}</div>
+                <div class="wb-meta">{% if j.staff_names %}{{j.staff_names|join(', ')}}{% else %}Nog geen medewerker{% endif %}</div>
+                <div class="wb-meta">{% if j.vehicle_code %}{{j.vehicle_code}}{% else %}Nog geen voertuig{% endif %}</div>
+                <div class="wb-meta">{{j.location_text}}</div>
+              </div>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="wb-note">De weekweergave gebruikt dezelfde planning als hierboven; wijzigingen doe je in de dienstblokken en daarna via Herbereken volledige planning.</div>
+      {% else %}
+      <div class="warn">Er zijn geen klussen beschikbaar voor de weekplanning.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -248,13 +307,33 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
     if(e <= s) e += 24 * 60;
     const visibleStart = Math.max(s, START);
     const visibleEnd = Math.min(e, END);
-    if(visibleEnd <= START || visibleStart >= END){
-      block.style.display = 'none';
-      return;
-    }
+    if(visibleEnd <= START || visibleStart >= END){ block.style.display = 'none'; return; }
     block.style.left = (((visibleStart - START) / SPAN) * 100) + '%';
     block.style.width = Math.max(((visibleEnd - visibleStart) / SPAN) * 100, 1.7) + '%';
   });
+
+  document.querySelectorAll('.wb-event').forEach(block => {
+    let s = toMinutes(block.dataset.start);
+    let e = toMinutes(block.dataset.end);
+    if(s === null || e === null) return;
+    if(e <= s) e += 24 * 60;
+    const visibleStart = Math.max(s, START);
+    const visibleEnd = Math.min(e, END);
+    if(visibleEnd <= START || visibleStart >= END){ block.style.display = 'none'; return; }
+    block.style.top = (((visibleStart - START) / SPAN) * 100) + '%';
+    block.style.height = Math.max(((visibleEnd - visibleStart) / SPAN) * 100, 4.2) + '%';
+  });
+
+  const buttons = document.querySelectorAll('[data-view-button]');
+  const dayView = document.getElementById('dayPlanningView');
+  const weekView = document.getElementById('weekPlanningView');
+  buttons.forEach(btn => btn.addEventListener('click', () => {
+    buttons.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const isWeek = btn.dataset.viewButton === 'week';
+    dayView.classList.toggle('active', !isWeek);
+    weekView.classList.toggle('active', isWeek);
+  }));
 })();
 </script>
 
