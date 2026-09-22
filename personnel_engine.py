@@ -169,11 +169,16 @@ def assign_staff_to_plan(plan, employees, manual_overrides=None):
                     job_warnings.append(f"⚠️ {e['name']} is volgens het weekrooster alleen 'soms / in overleg' beschikbaar.")
 
         # Vehicle-specific staff constraints.
-        own_transport = str(vehicle_code).startswith('Eigen vervoer + spelset')
+        vehicle_text = str(vehicle_code or '')
+        own_transport = vehicle_text.startswith('Eigen vervoer + spelset')
+        employee_car = vehicle_text.startswith('Extra auto medewerker')
+        rental_car = vehicle_text.startswith('Extra huurauto')
         if selected:
-            if own_transport and not any(_is_yes(e.get('own_transport')) for e in selected):
-                job_warnings.append('❗ PERSONEELSPROBLEEM: bij eigen vervoer heeft geen toegewezen medewerker Eigen vervoer = Ja.')
-            if vehicle_code and not own_transport and not any(_is_yes(e.get('driving_license')) for e in selected):
+            if (own_transport or employee_car) and not any(_is_yes(e.get('own_transport')) for e in selected):
+                job_warnings.append('❗ PERSONEELSPROBLEEM: bij deze vervoerskeuze heeft geen toegewezen medewerker Eigen vervoer = Ja.')
+            if rental_car and not any(_is_yes(e.get('driving_license')) for e in selected):
+                job_warnings.append('❗ PERSONEELSPROBLEEM: voor de huurauto heeft geen toegewezen medewerker een rijbewijs geregistreerd.')
+            if vehicle_text and not own_transport and not employee_car and not rental_car and not any(_is_yes(e.get('driving_license')) for e in selected):
                 job_warnings.append('❗ PERSONEELSPROBLEEM: voor deze bus heeft geen toegewezen medewerker een rijbewijs geregistreerd.')
 
         if len(selected) < required:
