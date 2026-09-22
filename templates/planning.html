@@ -13,6 +13,142 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 /* Dag / week schakelaar + weekplanbord */
 .view-switch{display:flex;gap:8px;margin-top:14px}.view-switch button{background:#eef2f6;color:#344054;border:1px solid #d0d5dd}.view-switch button.active{background:#1f2937;color:#fff;border-color:#1f2937}.planning-view{display:none}.planning-view.active{display:block}.weekboard-wrap{overflow-x:auto}.weekboard{min-width:1180px;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff}.wb-head{display:grid;grid-template-columns:84px repeat(var(--days),minmax(150px,1fr));background:#f8fafc;border-bottom:1px solid #e5e7eb}.wb-head>div{padding:10px 8px;border-right:1px solid #e5e7eb;text-align:center;font-weight:700}.wb-head>div:first-child{text-align:left}.wb-body{display:grid;grid-template-columns:84px repeat(var(--days),minmax(150px,1fr));height:900px;position:relative}.wb-times{position:relative;border-right:1px solid #e5e7eb;background:#fbfcfd}.wb-time{position:absolute;right:9px;transform:translateY(-50%);font-size:11px;color:#667085}.wb-day{position:relative;border-right:1px solid #e5e7eb;background-image:linear-gradient(to bottom,#eef2f6 1px,transparent 1px);background-size:100% 5.5555556%}.wb-event{position:absolute;left:5px;right:5px;border-radius:8px;padding:6px 7px;box-sizing:border-box;border-left:4px solid rgba(0,0,0,.22);font-size:10px;line-height:1.2;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.10)}.wb-event:hover{z-index:20;overflow:visible;height:auto!important;min-height:42px;box-shadow:0 5px 18px rgba(0,0,0,.20)}.wb-event .wb-title{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wb-event .wb-meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}.wb-note{margin-top:10px;color:#667085;font-size:12px}.view-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 
+
+
+/* =========================================================
+   JP ACTIVITEITEN HUISSTIJL - v7.9
+   Bronkleuren: paars #140821, goud #c9a227, donker goud #ad891d,
+   licht #f7f4fb, rand #ebe4f2.
+   ========================================================= */
+:root{
+  --jp-purple:#140821;
+  --jp-gold:#c9a227;
+  --jp-gold-dark:#ad891d;
+  --jp-text:#111111;
+  --jp-muted:#4d4658;
+  --jp-light:#f7f4fb;
+  --jp-border:#ebe4f2;
+  --jp-white:#ffffff;
+  --jp-shadow:0 18px 45px rgba(36,17,63,.08);
+  --jp-shadow-strong:0 22px 55px rgba(36,17,63,.12);
+}
+body{background:var(--jp-light);color:var(--jp-text)}
+.wrap{max-width:1500px;padding:0 24px}
+.card{
+  background:var(--jp-white);
+  border:1px solid var(--jp-border);
+  border-radius:28px;
+  box-shadow:var(--jp-shadow);
+  padding:24px;
+}
+.wrap>.card:first-child{
+  background:linear-gradient(112deg,rgba(20,8,33,.99),rgba(20,8,33,.92));
+  border:0;
+  color:#fff;
+  box-shadow:var(--jp-shadow-strong);
+}
+.wrap>.card:first-child h1{color:#fff}
+.wrap>.card:first-child .muted{color:rgba(255,255,255,.74)}
+.wrap>.card:first-child a{color:var(--jp-gold);font-weight:800;text-decoration:none}
+.wrap>.card:first-child a:hover{color:#fff}
+h1,h2,h3{letter-spacing:-.025em}
+h1{font-weight:900}
+h2{color:var(--jp-purple);font-weight:900}
+h3{color:var(--jp-purple)}
+.summary strong,.service-stats strong{color:var(--jp-purple);font-weight:900}
+.small,.muted,.date-head,.pb-day-summary,.pb-section-note,.wb-note{color:var(--jp-muted)}
+button{
+  background:var(--jp-gold);
+  color:#fff;
+  border-radius:999px;
+  font-weight:900;
+  box-shadow:0 10px 22px rgba(0,0,0,.10);
+  transition:.2s ease;
+}
+button:hover{background:var(--jp-gold-dark);transform:translateY(-1px)}
+input[type=time],input[type=number],select{
+  border:1px solid #d9d0e3;
+  border-radius:10px;
+  background:#fff;
+  color:var(--jp-text);
+}
+input[type=time]:focus,input[type=number]:focus,select:focus{
+  outline:none;
+  border-color:var(--jp-gold);
+  box-shadow:0 0 0 3px rgba(201,162,39,.14);
+}
+.service{border:1px solid var(--jp-border);box-shadow:var(--jp-shadow)}
+.service-head{border-bottom:1px solid var(--jp-border)}
+.service-title h2{color:var(--jp-purple)}
+.job{border-bottom:1px solid #f0ebf4}
+.manual-note{background:#f5f0fa;border:1px solid #ebe4f2;color:var(--jp-purple)}
+.service-path{
+  background:linear-gradient(90deg,#f7f4fb,#fffaf0);
+  border:1px solid var(--jp-border);
+  color:var(--jp-text);
+}
+.route-arrow{color:var(--jp-gold)}
+.game-time-badge{
+  background:rgba(201,162,39,.13);
+  color:var(--jp-purple);
+  border:1px solid rgba(201,162,39,.24);
+  font-weight:900;
+}
+.pill{background:#f3eef8;color:var(--jp-purple)}
+.ok{background:#edf9f1;color:#166534;border:1px solid #ccebd6}
+.warn{background:#fff8df;color:#6f5311;border:1px solid #f1dea0}
+.bad{background:#fff0f0;color:#8b1d1d;border:1px solid #f2c7c7}
+.unplanned{border:2px solid #e7b9b9}
+.material{border:2px solid var(--jp-gold)}
+.planboard-card-title{
+  border-top:0;
+  background:linear-gradient(112deg,var(--jp-purple),#24113f);
+  color:#fff;
+}
+.planboard-card-title h2{color:#fff}
+.planboard-card-title .pb-section-note{color:rgba(255,255,255,.75)}
+.planboard-card-title .pb-legend{color:rgba(255,255,255,.84)}
+.planboard-day,.weekboard{border:1px solid var(--jp-border);border-radius:22px;box-shadow:0 10px 30px rgba(36,17,63,.05)}
+.pb-day-head,.wb-head{
+  background:var(--jp-purple);
+  color:#fff;
+  border-bottom:1px solid rgba(255,255,255,.12);
+}
+.pb-day-head h3{color:#fff}
+.pb-day-summary{color:rgba(255,255,255,.72)}
+.pb-header{background:#fbf9fd;border-bottom:1px solid var(--jp-border)}
+.pb-label-head{color:var(--jp-purple);border-right:1px solid var(--jp-border)}
+.pb-hours{background-image:linear-gradient(to right,#e7dfed 1px,transparent 1px)}
+.pb-hour,.wb-time{color:var(--jp-muted)}
+.pb-row{border-bottom:1px solid #f0ebf4}
+.pb-game{background:#fbf9fd;border-right:1px solid var(--jp-border)}
+.pb-game strong{color:var(--jp-purple)}
+.pb-game span{color:var(--jp-muted)}
+.pb-track,.wb-day{background-image:linear-gradient(to right,#eee8f2 1px,transparent 1px)}
+.pb-block,.wb-event{border-left-color:var(--jp-purple);box-shadow:0 4px 12px rgba(36,17,63,.10)}
+.pb-ok{background:#dcf7e7}
+.pb-warn{background:#fff0b8}
+.pb-bad{background:#ffd9d9}
+.pb-neutral{background:#eee9f2}
+.pb-main,.pb-time,.wb-title{color:var(--jp-purple)}
+.view-switch button{
+  background:#fff;
+  color:var(--jp-purple);
+  border:1px solid var(--jp-border);
+  box-shadow:none;
+}
+.view-switch button:hover{background:#f5f0fa;color:var(--jp-purple)}
+.view-switch button.active{
+  background:var(--jp-gold);
+  color:#fff;
+  border-color:var(--jp-gold);
+}
+.weekboard{background:#fff}
+.wb-head>div{border-right:1px solid rgba(255,255,255,.12)}
+.wb-times{background:#fbf9fd;border-right:1px solid var(--jp-border)}
+.wb-day{border-right:1px solid var(--jp-border);background-image:linear-gradient(to bottom,#eee8f2 1px,transparent 1px)}
+@media(max-width:700px){.card{border-radius:20px;padding:18px}.wrap{padding:0 12px}}
+
 </style>
 </head>
 <body>
@@ -20,7 +156,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 <div class="card">
   <div class="topline">
     <div>
-      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v7.8 actief</span></h1>
+      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v7.9 · JP huisstijl actief</span></h1>
       <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a> · <a href="/personnel">Personeel beheren</a></p>
       <p class="muted">Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen → terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur. Smart Event Manager blijft leidend voor spelstart en speleinde.</p>
     </div>
