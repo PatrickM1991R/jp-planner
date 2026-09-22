@@ -1,4 +1,5 @@
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, redirect, url_for
 from dotenv import load_dotenv
 import db
@@ -10,6 +11,34 @@ from personnel_engine import assign_staff_to_plan
 from staff_parser import parse_personnel_workbook
 
 load_dotenv(); app=Flask(__name__); app.secret_key=os.getenv('FLASK_SECRET_KEY','dev-change-me')
+
+
+@app.after_request
+def apply_jp_house_style(response):
+    """Load one JP Activiteiten stylesheet on every rendered HTML page.
+
+    This also covers templates such as fleet.html without requiring every
+    template to be edited separately.
+    """
+    ctype=(response.content_type or '').lower()
+    if 'text/html' not in ctype:
+        return response
+    try:
+        html=response.get_data(as_text=True)
+        if '/static/jp_theme.css' not in html:
+            html=html.replace('</head>', '<link rel="stylesheet" href="/static/jp_theme.css?v=8.0"></head>')
+        if 'jp-global-brandline' not in html:
+            html=html.replace('<body', '<body', 1)
+            body_end=html.find('> ', html.find('<body'))
+            # Normal templates use <body> or <body ...>; inject immediately after the tag.
+            idx=html.find('>', html.find('<body'))
+            if idx >= 0:
+                html=html[:idx+1]+'<div class="jp-global-brandline" aria-hidden="true"></div>'+html[idx+1:]
+        response.set_data(html)
+        response.headers['Content-Length']=str(len(response.get_data()))
+    except Exception:
+        pass
+    return response
 
 def db_status():
     try:
@@ -28,6 +57,59 @@ def default_staff(participants):
     except (TypeError, ValueError):
         count = 0
     return max(1, (count + 29) // 30)
+
+
+def _expand_location_labels(rows):
+    """Resolve venue names to a full map label during import.
+
+    Examples such as 'Paviljoen de Bloemert' or 'Robin Hood Drouwen' are
+    resolved once, cached in PostgreSQL by LocationService, and on subsequent
+    uploads loaded from that cache. A weak match is shown for review rather
+    than silently treated as certain.
+    """
+    service=LocationService()
+    queries=[]
+    for row in rows:
+        q=clean_location_hint(row.get('location_edit') or row.get('location_hint') or '')
+        if q and q not in queries:
+            queries.append(q)
+    if not queries:
+        return rows
+
+    resolved={}
+    def one(q):
+        try:
+            return q, service.resolve_display(q)
+        except Exception:
+            return q, None
+
+    # Cached names return immediately. Unknown names are looked up concurrently,
+    # avoiding the long sequential geocoding cycle that previously caused timeouts.
+    with ThreadPoolExecutor(max_workers=min(4, max(1, len(queries)))) as pool:
+        futures=[pool.submit(one,q) for q in queries]
+        for fut in as_completed(futures):
+            q,result=fut.result()
+            if result:
+                resolved[q]=result
+
+    for row in rows:
+        q=clean_location_hint(row.get('location_edit') or row.get('location_hint') or '')
+        result=resolved.get(q)
+        if not result:
+            continue
+        label=(result.get('label') or '').strip()
+        if label:
+            # Full Pelias label normally contains venue/street, postcode/place and country.
+            row['location_edit']=label
+            row['location']={
+                'status':result.get('status','geocoded'),
+                'query':q,
+                'label':label,
+                'lat':result.get('lat'),
+                'lon':result.get('lon'),
+            }
+            row['location_source']='database' if result.get('status') in ('db_cached','cached') else 'map'
+    return rows
 
 def enrich_rows(rows):
     activities,locations,reservations=db.preload_corrections() if db.configured() else ({},{},{})
@@ -58,7 +140,10 @@ def index(): return render_home()
 def upload():
     f=request.files.get('file')
     if not f or not f.filename: return render_home(error='Kies eerst een bestand.')
-    try: return render_home(rows=enrich_rows(parse_upload(f)))
+    try:
+        rows=enrich_rows(parse_upload(f))
+        rows=_expand_location_labels(rows)
+        return render_home(rows=rows)
     except Exception as e: return render_home(error=str(e))
 @app.post('/save-corrections')
 def save_corrections():
@@ -126,9 +211,53 @@ def generate_logistics():
 def personnel():
     try:
         employees,last_import=db.get_personnel()
-        return render_template('personnel.html',employees=employees,last_import=last_import,error=None,message=request.args.get('message'))
+        refdata=db.personnel_reference_data()
+        return render_template('personnel.html',employees=employees,last_import=last_import,refdata=refdata,error=None,message=request.args.get('message'))
     except Exception as e:
-        return render_template('personnel.html',employees=[],last_import=None,error=str(e),message=None)
+        return render_template('personnel.html',employees=[],last_import=None,refdata=db.personnel_reference_data(),error=str(e),message=None)
+
+@app.post('/personnel/add')
+def personnel_add():
+    try:
+        db.add_personnel_employee(
+            request.form.get('name',''),
+            request.form.get('driving_license','Onbekend'),
+            request.form.get('own_transport','Onbekend'),
+            request.form.get('notes',''),
+        )
+        return redirect(url_for('personnel',message='Nieuwe medewerker toegevoegd.'))
+    except Exception as e:
+        return redirect(url_for('personnel',message=f'Toevoegen mislukt: {e}'))
+
+@app.post('/personnel/save')
+def personnel_save():
+    try:
+        employee_id=int(request.form['employee_id'])
+        enabled=[]
+        for mode, key in [('', 'profile_fixed'), ('EVEN','profile_even'), ('ONEVEN','profile_odd')]:
+            if request.form.get(key)=='on': enabled.append(mode)
+        availability={}
+        for mode, prefix in [('', 'fixed'), ('EVEN','even'), ('ONEVEN','odd')]:
+            availability[mode]={}
+            for slot in db.personnel_reference_data()['slots']:
+                field=f"availability__{prefix}__{slot}"
+                availability[mode][slot]=request.form.get(field,'onbekend')
+        skills={activity:request.form.get(f'skill__{activity}','Onbekend')
+                for activity in db.personnel_reference_data()['skills']}
+        db.save_personnel_employee(
+            employee_id=employee_id,
+            name=request.form.get('name',''),
+            driving_license=request.form.get('driving_license','Onbekend'),
+            own_transport=request.form.get('own_transport','Onbekend'),
+            active=request.form.get('active')=='on',
+            notes=request.form.get('notes',''),
+            enabled_week_modes=enabled,
+            availability_by_mode=availability,
+            skills=skills,
+        )
+        return redirect(url_for('personnel',message=f"{request.form.get('name','Medewerker')} opgeslagen."))
+    except Exception as e:
+        return redirect(url_for('personnel',message=f'Opslaan mislukt: {e}'))
 
 @app.post('/personnel/upload')
 def personnel_upload():
