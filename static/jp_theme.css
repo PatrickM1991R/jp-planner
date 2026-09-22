@@ -1,0 +1,131 @@
+:root{
+  --jp-purple:#140821;
+  --jp-purple-2:#24113f;
+  --jp-gold:#c9a227;
+  --jp-gold-dark:#ad891d;
+  --jp-light:#f7f4fb;
+  --jp-white:#ffffff;
+  --jp-text:#111111;
+  --jp-muted:#4d4658;
+  --jp-border:#ebe4f2;
+  --jp-shadow:0 18px 45px rgba(36,17,63,.08);
+  --jp-shadow-soft:0 10px 28px rgba(36,17,63,.07);
+}
+
+*{box-sizing:border-box}
+body{
+  font-family:Arial,sans-serif!important;
+  color:var(--jp-text)!important;
+  background:linear-gradient(180deg,#fbf9fd 0%,var(--jp-light) 100%)!important;
+}
+
+/* Algemene pagina-opbouw */
+.wrap{max-width:1500px!important;margin:28px auto!important;padding:0 22px!important}
+.card,
+.service,
+.panel,
+.box,
+.summary,
+.board-card{
+  background:#fff!important;
+  border:1px solid var(--jp-border)!important;
+  border-radius:24px!important;
+  box-shadow:var(--jp-shadow)!important;
+}
+.card{padding:24px!important;margin-bottom:20px!important}
+
+h1,h2,h3,h4{color:var(--jp-purple)!important;letter-spacing:-.025em}
+h1{font-weight:900!important}
+h2,h3,h4{font-weight:800!important}
+p,.muted,.small{color:var(--jp-muted)}
+
+a{color:var(--jp-purple);font-weight:700}
+a:hover{color:var(--jp-gold-dark)}
+
+/* Hoofdacties */
+button,.btn,input[type=submit],.button{
+  border:0!important;
+  border-radius:999px!important;
+  background:var(--jp-gold)!important;
+  color:#fff!important;
+  font-weight:900!important;
+  padding:11px 18px!important;
+  box-shadow:0 10px 22px rgba(173,137,29,.18)!important;
+  cursor:pointer;
+}
+button:hover,.btn:hover,input[type=submit]:hover,.button:hover{
+  background:var(--jp-gold-dark)!important;
+  transform:translateY(-1px);
+}
+button.secondary,.btn.secondary,.secondary{background:var(--jp-purple)!important;color:#fff!important}
+button.light,.btn.light,.light{background:#f3eef8!important;color:var(--jp-purple)!important}
+
+/* Formulieren */
+input[type=text],input[type=number],input[type=time],input[type=file],select,textarea{
+  border:1px solid #ddd4e8!important;
+  border-radius:12px!important;
+  background:#fff!important;
+  color:var(--jp-text)!important;
+}
+input[type=text]:focus,input[type=number]:focus,input[type=time]:focus,select:focus,textarea:focus{
+  outline:none!important;
+  border-color:var(--jp-gold)!important;
+  box-shadow:0 0 0 3px rgba(201,162,39,.13)!important;
+}
+
+/* Navigatie / bovenste beheerlinks */
+.top a,
+nav a,
+.jp-nav-link{
+  text-decoration:none;
+}
+
+/* Tabellen */
+table{border-collapse:separate!important;border-spacing:0!important}
+th{
+  background:#f5f1f9!important;
+  color:var(--jp-purple)!important;
+  font-weight:900!important;
+  border-bottom:1px solid var(--jp-border)!important;
+}
+td{border-bottom:1px solid #f0ebf4!important}
+tr:hover td{background:#fcfbfd}
+
+/* Badges en statussen: merkstijl voor neutrale badges, functionele kleuren blijven herkenbaar */
+.badge{border-radius:999px!important;font-weight:800!important}
+.badge:not(.b-ok):not(.b-warn):not(.b-bad):not(.ok):not(.warn):not(.bad){background:#f3eef8!important;color:var(--jp-purple)!important}
+.b-ok,.ok{background:#dcfce7!important;color:#166534!important}
+.b-warn,.warn{background:#fef3c7!important;color:#854d0e!important}
+.b-bad,.bad,.error{background:#fee2e2!important;color:#991b1b!important}
+
+/* Dienst / planbord */
+.service{overflow:hidden}
+.routebar{background:#f8f5fb!important;border-color:var(--jp-border)!important;color:var(--jp-purple)!important}
+.timeline-head,.board-head,.toolbar{background:#f5f1f9!important;border-color:var(--jp-border)!important}
+.timeline-label,.board-label{color:var(--jp-purple)!important;font-weight:900!important}
+
+/* Actieve tab Dag/Week */
+.view-toggle button.active,.toggle button.active,[aria-selected=true]{background:var(--jp-gold)!important;color:#fff!important}
+
+/* Personeelsregister */
+details.employee{border-color:var(--jp-border)!important;border-radius:18px!important;box-shadow:var(--jp-shadow-soft)!important}
+details.employee>summary{color:var(--jp-purple)!important;background:#fff!important}
+.profile,.skill{border-color:var(--jp-border)!important;background:#fcfbfd!important}
+
+/* Wagenpark */
+.vehicle,.depot,.resource,.fleet-card{border-color:var(--jp-border)!important;border-radius:18px!important}
+
+/* Kleine JP merkaccentbalk, op elke HTML-pagina via app.py geÃ¯njecteerd */
+.jp-global-brandline{
+  height:5px;
+  width:100%;
+  position:fixed;
+  left:0;top:0;
+  z-index:9999;
+  background:linear-gradient(90deg,var(--jp-purple) 0 72%,var(--jp-gold) 72% 100%);
+}
+
+@media(max-width:800px){
+  .wrap{padding:0 12px!important;margin-top:18px!important}
+  .card{border-radius:18px!important;padding:18px!important}
+}
