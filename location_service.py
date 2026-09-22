@@ -225,6 +225,89 @@ class LocationService:
         best["match_score"] = round(score, 3)
         return best
 
+    def resolve_display(self, query, use_cache=True):
+        """Fast venue-name -> full address label lookup for the upload screen.
+
+        This intentionally uses at most two geocoder calls. It is meant for
+        user-facing enrichment, while the full planner can still use resolve().
+        Successful results are persisted in the normal location cache.
+        """
+        query = clean_location_hint(query)
+        if not query:
+            return {"status": "missing", "query": ""}
+
+        k = _key(query)
+        if use_cache:
+            if db is not None and getattr(db, "configured", lambda: False)():
+                try:
+                    persistent = db.get_geocode_cache(query)
+                    if persistent:
+                        return {
+                            "status": "db_cached",
+                            "query": query,
+                            "label": persistent.get("label") or query,
+                            "lat": float(persistent["lat"]),
+                            "lon": float(persistent["lon"]),
+                        }
+                except Exception:
+                    pass
+            cache = load_cache()
+            if k in cache:
+                item = dict(cache[k])
+                item.update({"status": "cached", "query": query})
+                return item
+
+        if not self.configured:
+            return {"status": "needs_api", "query": query}
+
+        candidates=[]
+        # First search exactly what Smart Event Manager supplied. If needed,
+        # repeat with an explicit Netherlands suffix for venue-only names.
+        variants=[query]
+        country_variant=f"{query}, Nederland"
+        if country_variant.casefold() != query.casefold():
+            variants.append(country_variant)
+        last_error=None
+        for variant in variants[:2]:
+            try:
+                matches=self.geocode(variant,size=5)
+            except Exception as exc:
+                last_error=exc
+                continue
+            for match in matches:
+                candidates.append((_score_match(query,variant,match),variant,match))
+            if candidates and max(x[0] for x in candidates) >= 4.2:
+                break
+
+        if not candidates:
+            if last_error:
+                raise last_error
+            return {"status":"unresolved","query":query}
+
+        candidates.sort(key=lambda x:x[0],reverse=True)
+        score,variant,best=candidates[0]
+        record={
+            "label":best.get("label") or best.get("name") or query,
+            "lon":best.get("lon"),
+            "lat":best.get("lat"),
+            "locality":best.get("locality", ""),
+            "region":best.get("region", ""),
+            "search_variant":variant,
+            "match_score":round(score,3),
+        }
+        # Keep uncertain candidates visible but marked for review.
+        status="geocoded" if score >= 3.2 else "needs_review"
+        if use_cache and record["lat"] is not None and record["lon"] is not None:
+            with _LOCK:
+                cache=load_cache(); cache[k]=record; save_cache(cache)
+            if db is not None and getattr(db,"configured",lambda:False)():
+                try:
+                    db.save_geocode_cache(query,record["label"],record["lat"],record["lon"])
+                except Exception:
+                    pass
+        out=dict(record); out.update({"status":status,"query":query})
+        return out
+
     def resolve(self, query, use_cache=True):
         query = clean_location_hint(query)
         if not query:
