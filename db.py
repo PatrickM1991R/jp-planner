@@ -5,6 +5,8 @@ from contextlib import contextmanager
 import psycopg
 from psycopg.rows import dict_row
 
+from personnel_seed import PERSONNEL_SEED, PERSONNEL_SKILLS, AVAILABILITY_SLOTS
+
 
 def _norm(text):
     return re.sub(r"\s+", " ", (text or "")).strip().casefold()
@@ -78,6 +80,7 @@ def ensure_schema():
                 )""")
         conn.commit()
     seed_logistics()
+    seed_personnel_defaults()
 
 
 def seed_logistics():
@@ -299,6 +302,137 @@ def save_personnel_import(rows, filename=''):
             cur.execute("INSERT INTO personnel_imports(filename,row_count) VALUES (%s,%s)", (filename, len(rows)))
         conn.commit()
     return len(imported_names)
+
+
+
+def seed_personnel_defaults():
+    """Seed the approved personnel register only when the personnel table is empty.
+
+    After the first seed, PostgreSQL is authoritative. Manual edits and later Excel
+    imports therefore survive deployments and are never overwritten by the code.
+    """
+    if not configured():
+        return
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("SELECT COUNT(*) AS n FROM employees")
+            row = cur.fetchone()
+            if row and int(row['n']) > 0:
+                return
+            for item in PERSONNEL_SEED:
+                name = (item.get('name') or '').strip()
+                if not name:
+                    continue
+                cur.execute("""
+                    INSERT INTO employees(name,driving_license,own_transport,active,notes,updated_at)
+                    VALUES (%s,%s,%s,%s,%s,NOW()) RETURNING id
+                """, (name, item.get('driving_license',''), item.get('own_transport','Onbekend'),
+                      bool(item.get('active', True)), item.get('notes','')))
+                employee_id = cur.fetchone()['id']
+                week_mode = (item.get('week_mode') or '').upper()
+                for slot, status in (item.get('availability') or {}).items():
+                    cur.execute("""
+                        INSERT INTO employee_availability(employee_id,week_mode,slot,status)
+                        VALUES (%s,%s,%s,%s)
+                    """, (employee_id, week_mode, slot, status))
+                for activity, status in (item.get('skills') or {}).items():
+                    cur.execute("""
+                        INSERT INTO employee_skills(employee_id,activity,skill_status)
+                        VALUES (%s,%s,%s)
+                    """, (employee_id, activity, status))
+            cur.execute("INSERT INTO personnel_imports(filename,row_count) VALUES (%s,%s)",
+                        ('Standaard personeelsregister', len(PERSONNEL_SEED)))
+        conn.commit()
+
+
+def personnel_reference_data():
+    """Return stable values needed by the direct personnel editor."""
+    return {
+        'skills': list(PERSONNEL_SKILLS),
+        'slots': list(AVAILABILITY_SLOTS),
+        'week_modes': ['', 'EVEN', 'ONEVEN'],
+        'availability_choices': [
+            ('beschikbaar', '✓ Beschikbaar'),
+            ('overleg', '~ Soms / in overleg'),
+            ('niet', '✕ Niet beschikbaar'),
+            ('onbekend', '? Onbekend'),
+        ],
+        'skill_choices': ['Ja', 'Nee', 'Onbekend'],
+    }
+
+
+def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbekend', notes=''):
+    name = (name or '').strip()
+    if not name:
+        raise ValueError('Naam ontbreekt.')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""
+                INSERT INTO employees(name,driving_license,own_transport,active,notes,updated_at)
+                VALUES (%s,%s,%s,TRUE,%s,NOW())
+                ON CONFLICT(name) DO NOTHING
+                RETURNING id
+            """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend', notes or ''))
+            created = cur.fetchone()
+            if not created:
+                raise ValueError('Deze medewerker bestaat al.')
+            employee_id = created['id']
+            for slot in AVAILABILITY_SLOTS:
+                cur.execute("""INSERT INTO employee_availability(employee_id,week_mode,slot,status)
+                    VALUES (%s,'',%s,'onbekend')""", (employee_id, slot))
+            for activity in PERSONNEL_SKILLS:
+                cur.execute("""INSERT INTO employee_skills(employee_id,activity,skill_status)
+                    VALUES (%s,%s,'Onbekend')""", (employee_id, activity))
+        conn.commit()
+    return employee_id
+
+
+def save_personnel_employee(employee_id, name, driving_license, own_transport, active, notes,
+                            enabled_week_modes, availability_by_mode, skills):
+    ensure_schema()
+    employee_id = int(employee_id)
+    name = (name or '').strip()
+    if not name:
+        raise ValueError('Naam ontbreekt.')
+    enabled = set(enabled_week_modes or [])
+    if not enabled:
+        enabled = {''}
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""
+                UPDATE employees SET name=%s,driving_license=%s,own_transport=%s,
+                    active=%s,notes=%s,updated_at=NOW() WHERE id=%s
+            """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend',
+                  bool(active), notes or '', employee_id))
+            if cur.rowcount != 1:
+                raise ValueError('Medewerker niet gevonden.')
+            cur.execute("DELETE FROM employee_availability WHERE employee_id=%s", (employee_id,))
+            for mode in ['', 'EVEN', 'ONEVEN']:
+                if mode not in enabled:
+                    continue
+                mode_values = availability_by_mode.get(mode, {})
+                for slot in AVAILABILITY_SLOTS:
+                    status = mode_values.get(slot, 'onbekend')
+                    if status not in {'beschikbaar','overleg','niet','onbekend'}:
+                        status = 'onbekend'
+                    cur.execute("""
+                        INSERT INTO employee_availability(employee_id,week_mode,slot,status)
+                        VALUES (%s,%s,%s,%s)
+                    """, (employee_id, mode, slot, status))
+            cur.execute("DELETE FROM employee_skills WHERE employee_id=%s", (employee_id,))
+            for activity in PERSONNEL_SKILLS:
+                status = skills.get(activity, 'Onbekend')
+                if status not in {'Ja','Nee','Onbekend'}:
+                    status = 'Onbekend'
+                cur.execute("""
+                    INSERT INTO employee_skills(employee_id,activity,skill_status)
+                    VALUES (%s,%s,%s)
+                """, (employee_id, activity, status))
+        conn.commit()
 
 
 def get_personnel():
