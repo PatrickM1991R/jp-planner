@@ -219,10 +219,10 @@ def generate_logistics():
 def personnel():
     try:
         employees,last_import=db.get_personnel()
-        refdata=db.personnel_reference_data()
+        refdata=_personnel_refdata()
         return render_template('personnel.html',employees=employees,last_import=last_import,refdata=refdata,error=None,message=request.args.get('message'))
     except Exception as e:
-        return render_template('personnel.html',employees=[],last_import=None,refdata=db.personnel_reference_data(),error=str(e),message=None)
+        return render_template('personnel.html',employees=[],last_import=None,refdata=_personnel_refdata(),error=str(e),message=None)
 
 @app.post('/personnel/add')
 def personnel_add():
@@ -247,11 +247,11 @@ def personnel_save():
         availability={}
         for mode, prefix in [('', 'fixed'), ('EVEN','even'), ('ONEVEN','odd')]:
             availability[mode]={}
-            for slot in db.personnel_reference_data()['slots']:
+            for slot in _personnel_refdata()['slots']:
                 field=f"availability__{prefix}__{slot}"
                 availability[mode][slot]=request.form.get(field,'onbekend')
         skills={activity:request.form.get(f'skill__{activity}','Onbekend')
-                for activity in db.personnel_reference_data()['skills']}
+                for activity in _personnel_refdata()['skills']}
         db.save_personnel_employee(
             employee_id=employee_id,
             name=request.form.get('name',''),
