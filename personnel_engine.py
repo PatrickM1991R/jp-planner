@@ -12,6 +12,35 @@ def _dt(date_text, time_text):
     return datetime.fromisoformat(f"{date_text}T{time_text}:00")
 
 
+
+
+def _format_minutes(value):
+    value = max(0, int(round(value or 0)))
+    hours, minutes = divmod(value, 60)
+    if hours and minutes:
+        return f"{hours} uur {minutes} min"
+    if hours:
+        return f"{hours} uur"
+    return f"{minutes} min"
+
+
+def _break_minutes(duty_minutes):
+    """JP Activiteiten break rule, applied per individual service/duty.
+
+    Thresholds are inclusive and based on the duty span before adding the break:
+    - from 5h15 (315 min): 15 min break
+    - from 6h00 (360 min): 30 min break
+    - from 8h30 (510 min): 45 min break
+    """
+    minutes = max(0, int(round(duty_minutes or 0)))
+    if minutes >= 510:
+        return 45
+    if minutes >= 360:
+        return 30
+    if minutes >= 315:
+        return 15
+    return 0
+
 def _week_mode(date_text):
     week = datetime.fromisoformat(date_text).isocalendar().week
     return 'EVEN' if week % 2 == 0 else 'ONEVEN'
@@ -222,14 +251,75 @@ def assign_staff_to_plan(plan, employees, manual_overrides=None):
             busy[e['id']].append((start_dt, end_dt, ref))
             last_vehicle[e['id']] = vehicle_code
 
-    # Route summary: union of all named staff used on that service.
+    # Route summary: one service may contain multiple different activities.
+    # Keep the service together visually and calculate the actual duty span per colleague.
+    staff_totals = {}
     for route in plan.get('vehicle_routes', []):
         seen = []
-        for job in route.get('jobs', []):
+        activities = []
+        jobs = route.get('jobs', []) or []
+        for job in jobs:
+            activity = (job.get('activity') or '').strip()
+            if activity and activity not in activities:
+                activities.append(activity)
             for name in job.get('staff_names', []):
                 if name not in seen:
                     seen.append(name)
         route['staff_names'] = seen
+        route['activity_names'] = activities
+        route['activity_summary'] = ' + '.join(activities)
+
+        duty_rows = []
+        for name in seen:
+            positions = [i for i, job in enumerate(jobs) if name in (job.get('staff_names') or [])]
+            if not positions:
+                continue
+            first_pos, last_pos = positions[0], positions[-1]
+            first_job, last_job = jobs[first_pos], jobs[last_pos]
+            start_text = first_job.get('departure_time') or first_job.get('arrival_time') or first_job.get('start')
+            end_text = last_job.get('available_time') or last_job.get('end')
+            if last_pos == len(jobs) - 1 and route.get('return_time') and route.get('return_time') != 'onbekend':
+                end_text = route['return_time']
+            try:
+                start_dt = _dt(first_job['date'], start_text)
+                end_dt = _dt(last_job['date'], end_text)
+                if end_dt <= start_dt:
+                    from datetime import timedelta
+                    end_dt += timedelta(days=1)
+                minutes = round((end_dt - start_dt).total_seconds() / 60)
+            except Exception:
+                minutes = int(route.get('duty_minutes') or 0)
+            pause_minutes = _break_minutes(minutes)
+            total_minutes = minutes + pause_minutes
+            duty_rows.append({
+                'name': name,
+                'base_minutes': minutes,
+                'base_duration': _format_minutes(minutes),
+                'pause_minutes': pause_minutes,
+                'pause_duration': _format_minutes(pause_minutes),
+                'minutes': total_minutes,
+                'duration': _format_minutes(total_minutes),
+                'start': start_text,
+                'end': end_text,
+            })
+            current = staff_totals.setdefault(name, {'base_minutes': 0, 'pause_minutes': 0, 'minutes': 0})
+            current['base_minutes'] += minutes
+            current['pause_minutes'] += pause_minutes
+            current['minutes'] += total_minutes
+        route['staff_duty'] = duty_rows
+
+    plan['staff_duty_totals'] = [
+        {
+            'name': name,
+            'base_minutes': totals['base_minutes'],
+            'base_duration': _format_minutes(totals['base_minutes']),
+            'pause_minutes': totals['pause_minutes'],
+            'pause_duration': _format_minutes(totals['pause_minutes']),
+            'minutes': totals['minutes'],
+            'duration': _format_minutes(totals['minutes']),
+        }
+        for name, totals in sorted(staff_totals.items(), key=lambda item: item[0].casefold())
+    ]
 
     plan['employees'] = active
     plan['staff_problem_count'] = staff_problem_count

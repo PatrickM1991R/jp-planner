@@ -297,7 +297,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 <div class="card">
   <div class="topline">
     <div>
-      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v9.3 · vervoerfallback + CSS-grid</span></h1>
+      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v9.5 · diensten + pauzetijd</span></h1>
       <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a> · <a href="/personnel">Personeel beheren</a></p>
       <p class="muted">Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen → terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur. Smart Event Manager blijft leidend voor spelstart en speleinde.</p>
     </div>
@@ -333,7 +333,15 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
     <div class="service-title">
       <div class="date-head">{{r.date}}</div>
       <h2>Dienst {{r.service_number}} — {{r.vehicle_code}}{% if r.own_transport %} · eigen vervoer{% endif %}</h2>
-      <div class="meta"><strong>{{r.depot_name}}</strong> — {{r.depot_address}}</div>{% if r.staff_names %}<div class="meta"><strong>Personeel dienst:</strong> {{r.staff_names|join(", ")}}</div>{% endif %}
+      <div class="meta"><strong>{{r.depot_name}}</strong> — {{r.depot_address}}</div>
+      {% if r.staff_names %}<div class="meta"><strong>Personeel dienst:</strong> {{r.staff_names|join(", ")}}</div>{% endif %}
+      {% if r.staff_duty %}
+      <div class="meta" style="margin-top:6px">
+        {% for sd in r.staff_duty %}
+          <div><strong>{{sd.name}}:</strong> {{sd.base_duration}} dienst{% if sd.pause_minutes %} + {{sd.pause_duration}} pauze = <strong>{{sd.duration}}</strong>{% else %} · geen standaardpauze{% endif %}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
     <div class="service-stats">
       <div><span class="small">Dienst</span><strong>{{r.first_departure}}–{{r.return_time}}</strong><span class="small">{{r.duty_duration}}</span></div>
@@ -453,7 +461,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
   <div class="topline">
     <div>
       <h2 class="pb-section-title">Dagplanning op tijdsbalk</h2>
-      <p class="pb-section-note">Hieronder staat de volledige inzet per klus: vertrek, reistijd, opbouw, spel en opruimen. Het blok beslaat de hele bezette periode; de echte speltijd staat vet in het blok.</p>
+      <p class="pb-section-note">Iedere rij is nu één complete dienst. Alle spellen van dezelfde bus en collega('s) staan op dezelfde tijdsbalk en gebruiken dezelfde dienstkleur. De totale diensttijd wordt ook per collega opgeteld.</p>
       <div class="pb-legend">
         <span><i class="pb-dot" style="background:#bbf7d0"></i>Volledig gepland</span>
         <span><i class="pb-dot" style="background:#fde68a"></i>Controle / waarschuwing</span>
@@ -471,15 +479,15 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 <div id="dayPlanningView" class="planning-view active">
 <div class="card planboard-wrap">
   <div class="planboard">
-  {% if plan.jobs %}
-  {% for date_group in plan.jobs|groupby('date') %}
+  {% if plan.vehicle_routes %}
+  {% for date_group in plan.vehicle_routes|groupby('date') %}
     <section class="planboard-day" data-planboard-day>
       <div class="pb-day-head">
         <h3>{{date_group.grouper}}</h3>
-        <div class="pb-day-summary">{{date_group.list|length}} klus{% if date_group.list|length != 1 %}sen{% endif %}</div>
+        <div class="pb-day-summary">{{date_group.list|length}} dienst{% if date_group.list|length != 1 %}en{% endif %}</div>
       </div>
       <div class="pb-header">
-        <div class="pb-label-head">Spel / activiteit</div>
+        <div class="pb-label-head">Dienst / activiteiten</div>
         <div class="pb-hours">
           {% for hour in range(8,27) %}
             <span class="pb-hour" style="left:{{((hour-8)/18*100)}}%">{{'%02d' % (hour if hour < 24 else hour-24)}}:00</span>
@@ -487,16 +495,19 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
         </div>
       </div>
 
-      {% for activity_group in date_group.list|groupby('activity') %}
+      {% for r in date_group.list %}
       <div class="jp92-row">
         <div class="jp92-game">
-          <strong>{{activity_group.grouper}}</strong>
-          <span>{{activity_group.list|length}} klus{% if activity_group.list|length != 1 %}sen{% endif %}</span>
+          <strong>Dienst {{r.service_number}} · {{r.activity_summary or 'Activiteiten'}}</strong>
+          <span>{{r.vehicle_code}}</span>
+          {% if r.staff_names %}<span>{{r.staff_names|join(', ')}}</span>{% endif %}
+          <span><strong style="display:inline;color:#140821">{{r.first_departure}}–{{r.return_time}}</strong> · {{r.duty_duration}}</span>
+          {% if r.staff_duty %}
+            {% for sd in r.staff_duty %}<span>{{sd.name}}: {{sd.duration}}</span>{% endfor %}
+          {% endif %}
         </div>
-        <div class="jp92-track">
-          {% for j in activity_group.list %}
-            {% set svc = namespace(key='', label='') %}
-            {% for rr in plan.vehicle_routes %}{% for sj in rr.jobs %}{% if sj.form_index == j.form_index %}{% set svc.key = rr.date ~ '|' ~ rr.service_number ~ '|' ~ rr.vehicle_code %}{% set svc.label = 'Dienst ' ~ rr.service_number ~ ' · ' ~ rr.vehicle_code ~ ((' · ' ~ (rr.staff_names|join(', '))) if rr.staff_names else '') %}{% endif %}{% endfor %}{% endfor %}
+        <div class="jp92-track" data-service-row="{{r.date}}|{{r.service_number}}|{{r.vehicle_code}}">
+          {% for j in r.jobs %}
             {% set block_class = 'pb-ok' %}
             {% if j.material_problem or j.staff_problem or j.status in ['unplanned','not_planned'] %}
               {% set block_class = 'pb-bad' %}
@@ -506,14 +517,15 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
             <div class="jp92-block {{block_class}}"
                  data-start="{{j.departure_time or j.arrival_time or j.start}}" data-end="{{j.available_time or j.end}}"
                  data-game-start="{{j.start}}" data-game-end="{{j.end}}"
-                 data-service-key="{{svc.key}}" data-service-label="{{svc.label}}"
+                 data-service-key="{{r.date}}|{{r.service_number}}|{{r.vehicle_code}}"
+                 data-service-label="Dienst {{r.service_number}} · {{r.activity_summary}} · {{r.vehicle_code}}{% if r.staff_names %} · {{r.staff_names|join(', ')}}{% endif %}"
                  title="{{j.activity}} · {{j.location_text}}">
-              {% if svc.label %}<div class="pb-service">{{svc.label}}</div>{% endif %}
+              <div class="pb-service">{{j.activity}}</div>
               <div class="pb-time">Vertrek {{j.departure_time or '—'}} · Rit {% if j.travel_minutes is not none %}{{j.travel_minutes}} min{% else %}—{% endif %}</div>
               <div class="pb-meta">Opbouw {{j.setup_minutes}} min</div>
               <div class="pb-main">SPEL {{j.start}}–{{j.end}} · <span class="pb-duration"></span></div>
               <div class="pb-meta">Opruimen {{j.cleanup_minutes}} min · beschikbaar {{j.available_time or '—'}}</div>
-              <div class="pb-meta">{% if j.staff_names %}{{j.staff_names|join(', ')}}{% else %}Nog geen medewerker{% endif %} · {% if j.vehicle_code %}{{j.vehicle_code}}{% else %}Nog geen voertuig{% endif %}</div>
+              <div class="pb-meta">{% if j.staff_names %}{{j.staff_names|join(', ')}}{% else %}Nog geen medewerker{% endif %} · {{r.vehicle_code}}</div>
               <div class="pb-meta">{{j.location_text}}</div>
             </div>
           {% endfor %}
@@ -523,11 +535,29 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
     </section>
   {% endfor %}
   {% else %}
-    <div class="warn">Er zijn geen klussen beschikbaar om op het dagplanbord te tonen.</div>
+    <div class="warn">Er zijn nog geen ingeplande diensten om op het dagplanbord te tonen.</div>
   {% endif %}
   </div>
 </div>
 </div>
+
+{% if plan.staff_duty_totals %}
+<div class="card">
+  <h2 style="margin-top:0">Diensttijd per collega</h2>
+  <div class="summary">
+    {% for sd in plan.staff_duty_totals %}
+      <div>
+        <span class="small">{{sd.name}}</span>
+        <strong>{{sd.duration}}</strong>
+        <span class="small">Dienst {{sd.base_duration}} · pauze {{sd.pause_duration}}</span>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="muted" style="margin-top:10px">
+    Pauzeregel per dienst: vanaf 5 uur 15 min = 15 min pauze; vanaf 6 uur = 30 min; vanaf 8 uur 30 min = 45 min. De pauze wordt opgeteld bij de diensttijd van de collega. De route- en speltijden zelf worden hierdoor niet verschoven.
+  </div>
+</div>
+{% endif %}
 
 <div id="weekPlanningView" class="planning-view">
   <div class="card">
