@@ -26,7 +26,7 @@ def apply_jp_house_style(response):
     try:
         html=response.get_data(as_text=True)
         if '/static/jp_theme.css' not in html:
-            html=html.replace('</head>', '<link rel="stylesheet" href="/static/jp_theme.css?v=8.4.3"></head>')
+            html=html.replace('</head>', '<link rel="stylesheet" href="/static/jp_theme.css?v=10.0"></head>')
         if 'jp-global-brandline' not in html:
             html=html.replace('<body', '<body', 1)
             body_end=html.find('> ', html.find('<body'))
@@ -192,6 +192,7 @@ def _jobs_from_form(form):
     jobs=[]
     overrides={}
     staff_overrides={}
+    depot_overrides={}
     for i in range(count):
         ref=(form.get(f'reference_{i}') or '').strip()
         try:
@@ -199,6 +200,7 @@ def _jobs_from_form(form):
         except ValueError:
             staff_required=1
         transport_employee=(form.get(f'extra_car_employee_{i}') or '').strip()
+        depot_override=(form.get(f'depot_override_{i}') or '').strip()
         jobs.append({
             'date':(form.get(f'date_{i}') or '').strip(),
             'start':(form.get(f'start_{i}') or '').strip(),
@@ -211,6 +213,7 @@ def _jobs_from_form(form):
             'location_text':(form.get(f'location_{i}') or '').strip(),
             'reference':ref,
             'transport_employee':transport_employee,
+            'depot_override':depot_override,
         })
         ov=(form.get(f'override_{i}') or '').strip()
         if ov and ref: overrides[ref]=ov
@@ -227,15 +230,17 @@ def _jobs_from_form(form):
                 manual_names.insert(0, transport_employee)
         if manual_names:
             staff_overrides[ref or str(i)] = manual_names
-    return jobs,overrides,staff_overrides
+        if depot_override:
+            depot_overrides[ref or str(i)] = depot_override
+    return jobs,overrides,staff_overrides,depot_overrides
 
 @app.post('/generate-logistics')
 def generate_logistics():
     try:
-        jobs,overrides,staff_overrides=_jobs_from_form(request.form)
+        jobs,overrides,staff_overrides,depot_overrides=_jobs_from_form(request.form)
         if not jobs: return render_home(error='Geen opdrachten ontvangen voor de planning.')
-        depots,vehicles,stock,resources=db.get_logistics()
-        plan=build_logistics_plan(jobs,depots,vehicles,stock,resources,overrides)
+        depots,vehicles,stock,resources,vehicle_materials=db.get_logistics()
+        plan=build_logistics_plan(jobs,depots,vehicles,stock,resources,vehicle_materials,overrides,depot_overrides)
         employees,_=db.get_personnel() if db.configured() else ([],None)
         plan=assign_staff_to_plan(plan,employees,staff_overrides) if employees else plan
         plan.setdefault('employees',employees)
@@ -312,14 +317,48 @@ def personnel_upload():
 @app.get('/fleet')
 def fleet():
     try:
-        depots,vehicles,stock,resources=db.get_logistics(); return render_template('fleet.html',depots=depots,vehicles=vehicles,stock=stock,resources=resources,error=None,message=request.args.get('message'))
-    except Exception as e: return render_template('fleet.html',depots=[],vehicles=[],stock=[],resources=[],error=str(e),message=None)
+        depots,vehicles,stock,resources,vehicle_materials=db.get_logistics()
+        return render_template('fleet.html',depots=depots,vehicles=vehicles,stock=stock,resources=resources,
+                               vehicle_materials=vehicle_materials,error=None,message=request.args.get('message'))
+    except Exception as e:
+        return render_template('fleet.html',depots=[],vehicles=[],stock=[],resources=[],vehicle_materials=[],error=str(e),message=None)
+
+@app.post('/fleet/depot/save')
+def fleet_depot_save():
+    try:
+        code=db.save_depot(request.form.get('code',''),request.form.get('name',''),request.form.get('address',''),request.form.get('active')=='on')
+        return redirect(url_for('fleet',message=f'Standplaats {code} opgeslagen.'))
+    except Exception as e:
+        return redirect(url_for('fleet',message=f'Standplaats opslaan mislukt: {e}'))
+
+@app.post('/fleet/vehicle/save')
 @app.post('/fleet/save')
 def fleet_save():
     try:
-        code=request.form['code']; db.save_vehicle(code,request.form['depot_code'],request.form['vehicle_type'],request.form.get('active')=='on',request.form.get('standard_game_set')=='on',int(request.form.get('game_capacity') or 0),request.form.get('notes',''))
+        code=(request.form.get('code') or '').strip()
+        db.save_vehicle(code,request.form.get('depot_code',''),request.form.get('vehicle_type','bus'),
+                        request.form.get('active')=='on',False,0,request.form.get('notes',''))
         return redirect(url_for('fleet',message=f'{code} opgeslagen.'))
-    except Exception as e: return redirect(url_for('fleet',message=f'Opslaan mislukt: {e}'))
+    except Exception as e:
+        return redirect(url_for('fleet',message=f'Voertuig opslaan mislukt: {e}'))
+
+@app.post('/fleet/material/save')
+def fleet_material_save():
+    try:
+        db.save_vehicle_material(request.form.get('vehicle_code',''),request.form.get('resource_code',''),
+                                 request.form.get('capacity_persons','0'),request.form.get('active')=='on',request.form.get('notes',''))
+        return redirect(url_for('fleet',message='Materiaal in voertuig opgeslagen.'))
+    except Exception as e:
+        return redirect(url_for('fleet',message=f'Materiaal opslaan mislukt: {e}'))
+
+@app.post('/fleet/stock/save')
+def fleet_stock_save():
+    try:
+        db.save_depot_stock(request.form.get('depot_code',''),request.form.get('resource_code',''),
+                            request.form.get('quantity','0'),request.form.get('capacity_per_set','0'),request.form.get('notes',''))
+        return redirect(url_for('fleet',message='Voorraad opgeslagen.'))
+    except Exception as e:
+        return redirect(url_for('fleet',message=f'Voorraad opslaan mislukt: {e}'))
 @app.post('/route-test')
 def route_test():
     origin_text=clean_location_hint(request.form.get('origin','')); destination_text=clean_location_hint(request.form.get('destination',''))

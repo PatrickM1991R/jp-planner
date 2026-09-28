@@ -73,6 +73,16 @@ def ensure_schema():
                     notes TEXT NOT NULL DEFAULT ''
                 )""")
             cur.execute("""
+                CREATE TABLE IF NOT EXISTS vehicle_materials (
+                    vehicle_code TEXT REFERENCES vehicles(code) ON DELETE CASCADE,
+                    resource_code TEXT REFERENCES global_resources(resource_code) ON DELETE CASCADE,
+                    resource_name TEXT NOT NULL,
+                    capacity_persons INTEGER NOT NULL DEFAULT 0,
+                    active BOOLEAN NOT NULL DEFAULT TRUE,
+                    notes TEXT NOT NULL DEFAULT '',
+                    PRIMARY KEY (vehicle_code, resource_code)
+                )""")
+            cur.execute("""
                 CREATE TABLE IF NOT EXISTS geocode_cache (
                     location_key TEXT PRIMARY KEY, location_text TEXT NOT NULL,
                     label TEXT, lat DOUBLE PRECISION NOT NULL, lon DOUBLE PRECISION NOT NULL,
@@ -83,31 +93,98 @@ def ensure_schema():
     seed_personnel_defaults()
 
 
+MATERIAL_CATALOG = [
+    ('IK_HOU_VAN_HOLLAND', 'Ik hou van Holland'),
+    ('ALLESKUNNER', 'De Alleskunner'),
+    ('MINUTE_TO_WIN_IT', 'Minute to Win It'),
+    ('MOORDSPEL', 'Moordspel'),
+    ('CRAZY_BINGO', 'Crazy Bingo'),
+    ('PUBQUIZ', 'Pubquiz'),
+    ('ALLES_MAG_VANDAAG', 'Alles mag vandaag'),
+    ('EXPEDITIE_ROBINSON', 'Expeditie Robinson'),
+    ('BOOGSCHIETEN', 'Boogschieten'),
+    ('HUNTED', 'Hunted'),
+    ('HIDDEN_GAMES', 'Hidden Games'),
+    ('CASINO', 'Casino'),
+    ('WESTERN_GAMES', 'Western Games'),
+    ('JONGENS_TEGEN_DE_MEISJES', 'Jongens tegen de Meisjes'),
+    ('HIGHLAND_GAMES', 'Highland Games'),
+]
+
+BUS_STANDARD_CODES = {
+    'IK_HOU_VAN_HOLLAND', 'ALLESKUNNER', 'MINUTE_TO_WIN_IT', 'MOORDSPEL',
+    'CRAZY_BINGO', 'PUBQUIZ', 'ALLES_MAG_VANDAAG', 'EXPEDITIE_ROBINSON',
+    'BOOGSCHIETEN',
+}
+
+
 def seed_logistics():
+    """Seed only missing logistics rows; never overwrite later manual edits."""
     with connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""INSERT INTO depots(code,name,address) VALUES
                 ('ASSEN','Assen','Beilerstraat 24, Assen'),
                 ('HOLLANDSCHEVELD','Hollandscheveld','Marten Kuilerweg 47, Hollandscheveld')
                 ON CONFLICT(code) DO NOTHING""")
+
             vehicles = [
                 ('z - BUS 2 (GROENE SLEUTEL)','ASSEN','bus',True,50,''),
                 ('Z- BUS 3, ZWART TRAFFIC','ASSEN','bus',True,50,''),
                 ('Z-Witte Bus traffic VBV-96-K','ASSEN','bus',True,50,''),
                 ('z -HVL BUS 1 (ORANJE SLEUTEL)','HOLLANDSCHEVELD','bus',True,50,''),
-                ('Z- VW Polo','ASSEN','auto',False,0,'Geen standaard spelset'),
+                ('Z- VW Polo','ASSEN','auto',False,0,'Geen standaard spelmateriaal'),
             ]
             for row in vehicles:
                 cur.execute("""INSERT INTO vehicles(code,depot_code,vehicle_type,standard_game_set,game_capacity,notes)
                     VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT(code) DO NOTHING""", row)
+
+            for code, name in MATERIAL_CATALOG:
+                cur.execute("""INSERT INTO global_resources(resource_code,resource_name,quantity,standard_in_vehicle,notes)
+                    VALUES (%s,%s,0,FALSE,'') ON CONFLICT(resource_code) DO NOTHING""", (code, name))
+
+            # Standard bus content: explicit per vehicle, 50 persons per game.
+            cur.execute("SELECT code,vehicle_type FROM vehicles")
+            for vehicle in cur.fetchall():
+                if str(vehicle['vehicle_type']).lower() != 'bus':
+                    continue
+                for resource_code, resource_name in MATERIAL_CATALOG:
+                    if resource_code not in BUS_STANDARD_CODES:
+                        continue
+                    cur.execute("""INSERT INTO vehicle_materials(vehicle_code,resource_code,resource_name,capacity_persons,active,notes)
+                        VALUES (%s,%s,%s,50,TRUE,'Standaard in deze bus')
+                        ON CONFLICT(vehicle_code,resource_code) DO NOTHING""",
+                        (vehicle['code'], resource_code, resource_name))
+
+            # Extra stock. These are editable defaults in the fleet screen.
+            # Standard games keep the earlier rule: 2 extra sets in Assen and 1 in Hollandscheveld.
+            defaults = []
+            name_by_code = dict(MATERIAL_CATALOG)
+            for resource_code in BUS_STANDARD_CODES:
+                resource_name = name_by_code[resource_code]
+                defaults.append(('ASSEN', resource_code, resource_name, 2, 50, 'Extra voorraad'))
+                defaults.append(('HOLLANDSCHEVELD', resource_code, resource_name, 1, 50, 'Extra voorraad'))
+            # Specific pickup-only totals requested by JP Activiteiten.
+            defaults.extend([
+                ('ASSEN','HUNTED','Hunted',5,50,'Hunted: 250 personen totaal'),
+                ('ASSEN','HIGHLAND_GAMES','Highland Games',2,50,'Highland Games: 2 sets totaal'),
+                ('ASSEN','CASINO','Casino',2,50,'Casino: 2 sets totaal'),
+                ('ASSEN','WESTERN_GAMES','Western Games',2,50,'Western Games: 2 sets totaal'),
+                ('ASSEN','HIDDEN_GAMES','Hidden Games',2,50,''),
+                ('HOLLANDSCHEVELD','HIDDEN_GAMES','Hidden Games',1,50,''),
+                ('ASSEN','JONGENS_TEGEN_DE_MEISJES','Jongens tegen de Meisjes',2,50,''),
+                ('HOLLANDSCHEVELD','JONGENS_TEGEN_DE_MEISJES','Jongens tegen de Meisjes',1,50,''),
+            ])
+            for row in defaults:
+                cur.execute("""INSERT INTO depot_stock(depot_code,resource_code,resource_name,quantity,capacity_per_set,notes)
+                    VALUES (%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT(depot_code,resource_code) DO NOTHING""", row)
+
+            # Keep the historical generic standard-stock rows for compatibility,
+            # but new planning prefers game-specific stock above.
             for depot, qty in [('ASSEN',2),('HOLLANDSCHEVELD',1)]:
                 cur.execute("""INSERT INTO depot_stock(depot_code,resource_code,resource_name,quantity,capacity_per_set,notes)
-                    VALUES (%s,'STANDARD_GAME_SET','Extra standaard spelset',%s,50,'Voor standaard indoor/outdoor/citygames')
+                    VALUES (%s,'STANDARD_GAME_SET','Extra standaard spelset',%s,50,'Legacy fallback; game-specifieke voorraad heeft voorrang')
                     ON CONFLICT(depot_code,resource_code) DO NOTHING""", (depot, qty))
-            cur.execute("""INSERT INTO global_resources(resource_code,resource_name,quantity,standard_in_vehicle,notes)
-                VALUES ('CASINO','Casino',2,FALSE,'Niet standaard in een voertuig'),
-                       ('WESTERN_GAMES','Western Games',0,FALSE,'Niet standaard in een voertuig; voorraad/aantal sets nog vast te leggen')
-                ON CONFLICT(resource_code) DO NOTHING""")
         conn.commit()
 
 
@@ -115,24 +192,80 @@ def get_logistics():
     ensure_schema()
     with connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT code,name,address,active FROM depots ORDER BY code")
-            depots = cur.fetchall()
+            cur.execute("SELECT code,name,address,active FROM depots ORDER BY name,code")
+            depots = [dict(r) for r in cur.fetchall()]
             cur.execute("SELECT code,depot_code,vehicle_type,active,standard_game_set,game_capacity,notes FROM vehicles ORDER BY depot_code,code")
-            vehicles = cur.fetchall()
-            cur.execute("SELECT depot_code,resource_code,resource_name,quantity,capacity_per_set,notes FROM depot_stock ORDER BY depot_code,resource_code")
-            stock = cur.fetchall()
-            cur.execute("SELECT resource_code,resource_name,quantity,standard_in_vehicle,notes FROM global_resources ORDER BY resource_code")
-            resources = cur.fetchall()
-    return depots, vehicles, stock, resources
+            vehicles = [dict(r) for r in cur.fetchall()]
+            cur.execute("SELECT depot_code,resource_code,resource_name,quantity,capacity_per_set,notes FROM depot_stock ORDER BY depot_code,resource_name")
+            stock = [dict(r) for r in cur.fetchall()]
+            cur.execute("SELECT resource_code,resource_name,quantity,standard_in_vehicle,notes FROM global_resources ORDER BY resource_name")
+            resources = [dict(r) for r in cur.fetchall()]
+            cur.execute("SELECT vehicle_code,resource_code,resource_name,capacity_persons,active,notes FROM vehicle_materials ORDER BY vehicle_code,resource_name")
+            vehicle_materials = [dict(r) for r in cur.fetchall()]
+    return depots, vehicles, stock, resources, vehicle_materials
 
 
-def save_vehicle(code, depot_code, vehicle_type, active, standard_game_set, game_capacity, notes):
+def save_depot(code, name, address, active=True):
+    code = (code or '').strip().upper().replace(' ', '_')
+    name = (name or '').strip()
+    address = (address or '').strip()
+    if not code or not name or not address:
+        raise ValueError('Code, naam en adres van de standplaats zijn verplicht.')
     ensure_schema()
     with connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""UPDATE vehicles SET depot_code=%s,vehicle_type=%s,active=%s,standard_game_set=%s,
-                game_capacity=%s,notes=%s WHERE code=%s""",
-                (depot_code, vehicle_type, active, standard_game_set, game_capacity, notes, code))
+            cur.execute("""INSERT INTO depots(code,name,address,active) VALUES (%s,%s,%s,%s)
+                ON CONFLICT(code) DO UPDATE SET name=EXCLUDED.name,address=EXCLUDED.address,active=EXCLUDED.active""",
+                (code, name, address, bool(active)))
+        conn.commit()
+    return code
+
+
+def save_vehicle(code, depot_code, vehicle_type, active, standard_game_set=False, game_capacity=0, notes=''):
+    code = (code or '').strip()
+    if not code:
+        raise ValueError('Voertuigcode ontbreekt.')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""INSERT INTO vehicles(code,depot_code,vehicle_type,active,standard_game_set,game_capacity,notes)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(code) DO UPDATE SET depot_code=EXCLUDED.depot_code,vehicle_type=EXCLUDED.vehicle_type,
+                active=EXCLUDED.active,standard_game_set=EXCLUDED.standard_game_set,
+                game_capacity=EXCLUDED.game_capacity,notes=EXCLUDED.notes""",
+                (code, depot_code, vehicle_type or 'bus', bool(active), bool(standard_game_set), int(game_capacity or 0), notes or ''))
+        conn.commit()
+
+
+def save_vehicle_material(vehicle_code, resource_code, capacity_persons, active=True, notes=''):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT resource_name FROM global_resources WHERE resource_code=%s", (resource_code,))
+            resource = cur.fetchone()
+            if not resource:
+                raise ValueError('Onbekend materiaal/spel.')
+            cur.execute("""INSERT INTO vehicle_materials(vehicle_code,resource_code,resource_name,capacity_persons,active,notes)
+                VALUES (%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(vehicle_code,resource_code) DO UPDATE SET resource_name=EXCLUDED.resource_name,
+                capacity_persons=EXCLUDED.capacity_persons,active=EXCLUDED.active,notes=EXCLUDED.notes""",
+                (vehicle_code, resource_code, resource['resource_name'], max(0, int(capacity_persons or 0)), bool(active), notes or ''))
+        conn.commit()
+
+
+def save_depot_stock(depot_code, resource_code, quantity, capacity_per_set, notes=''):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT resource_name FROM global_resources WHERE resource_code=%s", (resource_code,))
+            resource = cur.fetchone()
+            if not resource:
+                raise ValueError('Onbekend materiaal/spel.')
+            cur.execute("""INSERT INTO depot_stock(depot_code,resource_code,resource_name,quantity,capacity_per_set,notes)
+                VALUES (%s,%s,%s,%s,%s,%s)
+                ON CONFLICT(depot_code,resource_code) DO UPDATE SET resource_name=EXCLUDED.resource_name,
+                quantity=EXCLUDED.quantity,capacity_per_set=EXCLUDED.capacity_per_set,notes=EXCLUDED.notes""",
+                (depot_code, resource_code, resource['resource_name'], max(0, int(quantity or 0)), max(0, int(capacity_per_set or 0)), notes or ''))
         conn.commit()
 
 
