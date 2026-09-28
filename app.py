@@ -26,7 +26,7 @@ def apply_jp_house_style(response):
     try:
         html=response.get_data(as_text=True)
         if '/static/jp_theme.css' not in html:
-            html=html.replace('</head>', '<link rel="stylesheet" href="/static/jp_theme.css?v=8.0"></head>')
+            html=html.replace('</head>', '<link rel="stylesheet" href="/static/jp_theme.css?v=8.4.3"></head>')
         if 'jp-global-brandline' not in html:
             html=html.replace('<body', '<body', 1)
             body_end=html.find('> ', html.find('<body'))
@@ -34,6 +34,25 @@ def apply_jp_house_style(response):
             idx=html.find('>', html.find('<body'))
             if idx >= 0:
                 html=html[:idx+1]+'<div class="jp-global-brandline" aria-hidden="true"></div>'+html[idx+1:]
+        # Hard-fix location status labels across old/new templates.
+        # This keeps the UI readable even if Render/browser still serves an older index template.
+        if 'jp-location-status-fix' not in html:
+            status_script = '''<script id="jp-location-status-fix">
+            document.addEventListener('DOMContentLoaded', function () {
+              var known = ['db_cached','cached','saved','confirmed','geocoded'];
+              document.querySelectorAll('.badge').forEach(function (el) {
+                var t = (el.textContent || '').trim().toLowerCase();
+                if (known.indexOf(t) !== -1) {
+                  el.textContent = 'Locatie herkend';
+                  el.classList.remove('b-bad','bad','b-warn','warn');
+                  el.classList.add('b-ok');
+                  el.style.background = '#dcfce7';
+                  el.style.color = '#166534';
+                }
+              });
+            });
+            </script>'''
+            html=html.replace('</body>', status_script+'</body>')
         response.set_data(html)
         response.headers['Content-Length']=str(len(response.get_data()))
     except Exception:
@@ -110,14 +129,16 @@ def _expand_location_labels(rows):
         if label:
             # Full Pelias label normally contains venue/street, postcode/place and country.
             row['location_edit']=label
+            raw_status=result.get('status','geocoded')
+            display_status='saved' if raw_status in ('db_cached','cached','saved','confirmed','geocoded') else raw_status
             row['location']={
-                'status':result.get('status','geocoded'),
+                'status':display_status,
                 'query':q,
                 'label':label,
                 'lat':result.get('lat'),
                 'lon':result.get('lon'),
             }
-            row['location_source']='database' if result.get('status') in ('db_cached','cached') else 'map'
+            row['location_source']='database' if raw_status in ('db_cached','cached') else 'map'
     return rows
 
 def enrich_rows(rows):
