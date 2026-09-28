@@ -46,6 +46,15 @@ def db_status():
         db.ensure_schema(); return True
     except Exception: return False
 
+def _personnel_refdata():
+    """Reference values used by the personnel editor.
+
+    Keep this helper in app.py so the /personnel page can render reliably
+    while db.py remains the source of truth for the actual values.
+    """
+    return db.personnel_reference_data()
+
+
 def default_staff(participants):
     """Default staffing: 1 staff member per started block of 30 participants.
 
