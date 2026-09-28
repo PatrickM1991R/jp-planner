@@ -28,7 +28,8 @@
       <button class="btn" type="submit">Zoeken</button>
       {% if q %}<a class="tab" href="/plans?archived={{1 if archived else 0}}">Wis zoekopdracht</a>{% endif %}
     </form>
-    {% if request.args.get('message') %}<div style="margin-top:12px;padding:10px;border-radius:10px;background:#edf9f1;color:#166534">{{request.args.get('message')}}</div>{% endif %}
+    {% if message %}<div style="margin-top:12px;padding:10px;border-radius:10px;background:#edf9f1;color:#166534">{{message}}</div>{% endif %}
+    {% if error %}<div style="margin-top:12px;padding:10px;border-radius:10px;background:#fff0f0;color:#8b1d1d">{{error}}</div>{% endif %}
   </div>
 
   <div class="card">

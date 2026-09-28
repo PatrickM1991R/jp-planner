@@ -353,8 +353,20 @@ def plans():
     _auto_archive()
     archived=request.args.get('archived','0')=='1'
     q=(request.args.get('q') or '').strip()
-    plans=db.list_saved_plans(archived,q,250) if db.configured() else []
-    return render_template('plans.html',plans=plans,archived=archived,q=q,error=None)
+    try:
+        plan_rows=db.list_saved_plans(archived,q,250) if db.configured() else []
+        error=None
+    except Exception as e:
+        plan_rows=[]
+        error=f'Planningen laden mislukt: {e}'
+    return render_template(
+        'plans.html',
+        plans=plan_rows,
+        archived=archived,
+        q=q,
+        error=error,
+        message=(request.args.get('message') or '').strip(),
+    )
 
 
 @app.get('/plans/<int:plan_id>')
@@ -378,7 +390,7 @@ def archive_saved_plan(plan_id):
         db.set_saved_plan_archived(plan_id,True)
         if session.get('planning_id')==plan_id:
             session.pop('planning_id',None)
-        return redirect(url_for('plans',message='Planning naar archief verplaatst.'))
+        return redirect(url_for('plans',archived='1',message='Planning naar archief verplaatst.'))
     except Exception as e:
         return redirect(url_for('plans',message=f'Archiveren mislukt: {e}'))
 
@@ -387,7 +399,7 @@ def archive_saved_plan(plan_id):
 def restore_saved_plan(plan_id):
     try:
         db.set_saved_plan_archived(plan_id,False)
-        return redirect(url_for('plans',archived='1',message='Planning teruggezet naar actueel.'))
+        return redirect(url_for('plans',message='Planning teruggezet naar actueel.'))
     except Exception as e:
         return redirect(url_for('plans',archived='1',message=f'Terugzetten mislukt: {e}'))
 
