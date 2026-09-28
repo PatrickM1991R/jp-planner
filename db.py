@@ -448,6 +448,21 @@ def _ensure_personnel_schema(cur):
             PRIMARY KEY(employee_id, activity)
         )""")
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS personnel_skill_catalog (
+            activity TEXT PRIMARY KEY,
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            notes TEXT NOT NULL DEFAULT '',
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )""")
+    # Seed only missing catalog items. Existing edits remain authoritative.
+    for idx, activity in enumerate(PERSONNEL_SKILLS):
+        cur.execute("""
+            INSERT INTO personnel_skill_catalog(activity,active,sort_order,notes)
+            VALUES (%s,TRUE,%s,'')
+            ON CONFLICT(activity) DO NOTHING
+        """, (activity, idx))
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS personnel_imports (
             id BIGSERIAL PRIMARY KEY,
             imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -490,6 +505,13 @@ def save_personnel_import(rows, filename=''):
                     """, (employee_id, week_mode, slot, status))
                 # Skills are employee-level. A later row (e.g. EVEN/ONEVEN) safely upserts the same values.
                 for activity, status in (item.get('skills') or {}).items():
+                    cur.execute("SELECT COALESCE(MAX(sort_order),-1)+1 AS n FROM personnel_skill_catalog")
+                    nr = cur.fetchone()
+                    cur.execute("""
+                        INSERT INTO personnel_skill_catalog(activity,active,sort_order,notes)
+                        VALUES (%s,TRUE,%s,'Excel import')
+                        ON CONFLICT(activity) DO NOTHING
+                    """, (activity, int(nr['n']) if nr else 0))
                     cur.execute("""
                         INSERT INTO employee_skills(employee_id,activity,skill_status)
                         VALUES (%s,%s,%s)
@@ -542,10 +564,26 @@ def seed_personnel_defaults():
         conn.commit()
 
 
+def personnel_skill_catalog(include_inactive=True):
+    """Return the persistent skill/activity catalog."""
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            sql = "SELECT activity,active,sort_order,notes,updated_at FROM personnel_skill_catalog"
+            if not include_inactive:
+                sql += " WHERE active=TRUE"
+            sql += " ORDER BY sort_order, LOWER(activity)"
+            cur.execute(sql)
+            return [dict(r) for r in cur.fetchall()]
+
+
 def personnel_reference_data():
-    """Return stable values needed by the direct personnel editor."""
+    """Reference values used by the direct personnel editor."""
+    catalog = personnel_skill_catalog(include_inactive=True)
     return {
-        'skills': list(PERSONNEL_SKILLS),
+        'skills': [r['activity'] for r in catalog if r.get('active')],
+        'skill_catalog': catalog,
         'slots': list(AVAILABILITY_SLOTS),
         'week_modes': ['', 'EVEN', 'ONEVEN'],
         'availability_choices': [
@@ -557,6 +595,52 @@ def personnel_reference_data():
         'skill_choices': ['Ja', 'Nee', 'Onbekend'],
     }
 
+
+def save_personnel_skill(activity, active=True, notes=''):
+    activity = (activity or '').strip()
+    if not activity:
+        raise ValueError('Naam van vaardigheid/spel ontbreekt.')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("SELECT COALESCE(MAX(sort_order),-1)+1 AS n FROM personnel_skill_catalog")
+            row = cur.fetchone()
+            next_order = int(row['n']) if row else 0
+            cur.execute("""
+                INSERT INTO personnel_skill_catalog(activity,active,sort_order,notes,updated_at)
+                VALUES (%s,%s,%s,%s,NOW())
+                ON CONFLICT(activity) DO UPDATE SET
+                    active=EXCLUDED.active,
+                    notes=EXCLUDED.notes,
+                    updated_at=NOW()
+            """, (activity, bool(active), next_order, notes or ''))
+            # New skills become visible for every employee as Onbekend.
+            cur.execute("""
+                INSERT INTO employee_skills(employee_id,activity,skill_status)
+                SELECT id,%s,'Onbekend' FROM employees
+                ON CONFLICT(employee_id,activity) DO NOTHING
+            """, (activity,))
+        conn.commit()
+    return activity
+
+
+def set_personnel_skill_active(activity, active):
+    activity = (activity or '').strip()
+    if not activity:
+        raise ValueError('Vaardigheid ontbreekt.')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""
+                UPDATE personnel_skill_catalog
+                SET active=%s,updated_at=NOW()
+                WHERE activity=%s
+            """, (bool(active), activity))
+            if cur.rowcount != 1:
+                raise ValueError('Vaardigheid niet gevonden.')
+        conn.commit()
 
 def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbekend', notes=''):
     name = (name or '').strip()
@@ -579,9 +663,11 @@ def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbe
             for slot in AVAILABILITY_SLOTS:
                 cur.execute("""INSERT INTO employee_availability(employee_id,week_mode,slot,status)
                     VALUES (%s,'',%s,'onbekend')""", (employee_id, slot))
-            for activity in PERSONNEL_SKILLS:
+            cur.execute("SELECT activity FROM personnel_skill_catalog WHERE active=TRUE ORDER BY sort_order,LOWER(activity)")
+            for skill_row in cur.fetchall():
                 cur.execute("""INSERT INTO employee_skills(employee_id,activity,skill_status)
-                    VALUES (%s,%s,'Onbekend')""", (employee_id, activity))
+                    VALUES (%s,%s,'Onbekend') ON CONFLICT(employee_id,activity) DO NOTHING""",
+                    (employee_id, skill_row['activity']))
         conn.commit()
     return employee_id
 
@@ -619,14 +705,17 @@ def save_personnel_employee(employee_id, name, driving_license, own_transport, a
                         INSERT INTO employee_availability(employee_id,week_mode,slot,status)
                         VALUES (%s,%s,%s,%s)
                     """, (employee_id, mode, slot, status))
-            cur.execute("DELETE FROM employee_skills WHERE employee_id=%s", (employee_id,))
-            for activity in PERSONNEL_SKILLS:
+            # Preserve inactive catalog skills; update only currently active skills.
+            cur.execute("SELECT activity FROM personnel_skill_catalog WHERE active=TRUE ORDER BY sort_order,LOWER(activity)")
+            active_activities = [r['activity'] for r in cur.fetchall()]
+            for activity in active_activities:
                 status = skills.get(activity, 'Onbekend')
                 if status not in {'Ja','Nee','Onbekend'}:
                     status = 'Onbekend'
                 cur.execute("""
                     INSERT INTO employee_skills(employee_id,activity,skill_status)
                     VALUES (%s,%s,%s)
+                    ON CONFLICT(employee_id,activity) DO UPDATE SET skill_status=EXCLUDED.skill_status
                 """, (employee_id, activity, status))
         conn.commit()
 
@@ -640,7 +729,13 @@ def get_personnel():
             employees = [dict(r) for r in cur.fetchall()]
             cur.execute("SELECT employee_id,week_mode,slot,status FROM employee_availability ORDER BY employee_id,week_mode,slot")
             availability = [dict(r) for r in cur.fetchall()]
-            cur.execute("SELECT employee_id,activity,skill_status FROM employee_skills ORDER BY employee_id,activity")
+            cur.execute("""
+                SELECT es.employee_id,es.activity,es.skill_status
+                FROM employee_skills es
+                JOIN personnel_skill_catalog pc ON pc.activity=es.activity
+                WHERE pc.active=TRUE
+                ORDER BY es.employee_id,pc.sort_order,LOWER(es.activity)
+            """)
             skills = [dict(r) for r in cur.fetchall()]
             cur.execute("SELECT imported_at,filename,row_count FROM personnel_imports ORDER BY imported_at DESC LIMIT 1")
             last_import = cur.fetchone()

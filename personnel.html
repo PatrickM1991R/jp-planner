@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Personeel - JP Planner</title>
+<style>
+:root{--jp-purple:#140821;--jp-gold:#c9a227;--jp-gold-dark:#ad891d;--jp-light:#f7f4fb;--jp-border:#ebe4f2;--jp-muted:#5f5768;--ok:#edf9f1;--warn:#fff8df}
+*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;background:var(--jp-light);color:#17131d}.wrap{max-width:1500px;margin:28px auto;padding:0 24px}.hero{background:linear-gradient(112deg,#140821,#24113f);color:#fff;border-radius:28px;padding:28px;margin-bottom:18px;box-shadow:0 18px 45px rgba(36,17,63,.12)}.hero h1{margin:0 0 7px}.hero a{color:var(--jp-gold);font-weight:800;text-decoration:none}.hero p{color:rgba(255,255,255,.77)}.card{background:#fff;border:1px solid var(--jp-border);border-radius:24px;padding:22px;margin-bottom:18px;box-shadow:0 14px 35px rgba(36,17,63,.07)}h2,h3{color:var(--jp-purple)}.top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap}.muted,.small{color:var(--jp-muted)}.small{font-size:12px}.ok{background:var(--ok);color:#166534;border:1px solid #ccebd6;padding:10px;border-radius:10px}.warn{background:var(--warn);color:#6f5311;border:1px solid #f1dea0;padding:10px;border-radius:10px}.badge{display:inline-block;padding:5px 9px;border-radius:999px;background:#f3eef8;color:var(--jp-purple);font-size:11px;font-weight:800}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}.field label{display:block;font-size:12px;font-weight:800;margin-bottom:5px;color:var(--jp-muted)}.field input,.field select,.field textarea{width:100%;padding:9px;border:1px solid #d9d0e3;border-radius:10px;background:#fff}.field textarea{min-height:72px;resize:vertical}button{padding:10px 16px;border:0;border-radius:999px;background:var(--jp-gold);color:#fff;font-weight:900;cursor:pointer}button:hover{background:var(--jp-gold-dark)}.secondary{background:var(--jp-purple)}details.employee{background:#fff;border:1px solid var(--jp-border);border-radius:16px;margin:12px 0;overflow:hidden}details.employee>summary{cursor:pointer;padding:15px 18px;font-weight:800;display:flex;gap:10px;align-items:center;justify-content:space-between;list-style:none;color:var(--jp-purple)}details.employee>summary::-webkit-details-marker{display:none}.summary-right{font-weight:400;font-size:12px;color:var(--jp-muted)}.editor{padding:0 18px 20px;border-top:1px solid var(--jp-border)}.section{margin-top:18px}.section h3{margin:0 0 10px}.profile{border:1px solid var(--jp-border);border-radius:14px;padding:12px;margin:10px 0;background:#fbf9fd}.slots{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:8px;overflow:auto}.slot{min-width:150px}.slot label{display:block;font-size:11px;font-weight:800;margin-bottom:4px}.slot select{width:100%;padding:7px;border:1px solid #d9d0e3;border-radius:9px}.skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}.skill{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--jp-border);padding:8px 10px;border-radius:10px}.skill select{min-width:110px;padding:6px;border:1px solid #d9d0e3;border-radius:8px}.inactive{opacity:.55}.inline-check{display:flex;gap:8px;align-items:center;font-weight:800}.inline-check input{width:auto}.actions{display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap}.catalog{width:100%;border-collapse:collapse}.catalog th,.catalog td{padding:9px;border-bottom:1px solid #f0ebf4;text-align:left;vertical-align:middle}.catalog th{font-size:11px;text-transform:uppercase;color:var(--jp-muted)}.catalog input[type=text]{width:100%;padding:8px;border:1px solid #d9d0e3;border-radius:9px}.catalog-form{display:grid;grid-template-columns:minmax(220px,1fr) minmax(220px,2fr) auto;gap:10px;align-items:end}.import-box{border-top:1px solid var(--jp-border);margin-top:18px;padding-top:16px}@media(max-width:800px){.slots{grid-template-columns:repeat(2,minmax(150px,1fr))}.catalog-form{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="hero">
+  <div class="top"><div><h1>Personeelsbeheer <span class="badge" style="background:#fff7d6">v11.0 · vast register</span></h1><div><a href="/">← Opdrachten</a> · <a href="/fleet">Wagenpark & logistiek</a></div><p>Beheer medewerkers, vaste weekbeschikbaarheid en vaardigheden rechtstreeks in JP Planner. Alles wordt persistent opgeslagen en nieuwe/herberekende planningen gebruiken de actuele gegevens.</p></div><div><span class="badge" style="background:#fff">{{employees|length}} medewerkers</span></div></div>
+</div>
+{% if message %}<div class="ok" style="margin-bottom:14px">{{message}}</div>{% endif %}
+{% if error %}<div class="warn" style="margin-bottom:14px">{{error}}</div>{% endif %}
+
+<div class="card">
+<h2>1. Nieuwe medewerker</h2>
+<form action="/personnel/add" method="post"><div class="grid">
+<div class="field"><label>Naam</label><input name="name" required></div>
+<div class="field"><label>Rijbewijs</label><select name="driving_license"><option>Ja</option><option>Automaat</option><option>Nee</option><option selected>Onbekend</option></select></div>
+<div class="field"><label>Eigen vervoer</label><select name="own_transport"><option>Ja</option><option>Nee</option><option selected>Onbekend</option></select></div>
+<div class="field"><label>Opmerking</label><input name="notes"></div>
+</div><div class="actions"><button>Medewerker toevoegen</button></div></form>
+<div class="import-box"><details><summary><strong>Optioneel: Excel bulk-import / update</strong></summary><p class="muted">Excel blijft beschikbaar om veel medewerkers tegelijk te wijzigen. Het personeelsregister in de database blijft daarna leidend.</p><form action="/personnel/upload" method="post" enctype="multipart/form-data"><input type="file" name="file" accept=".xlsx,.xlsm" required> <button class="secondary">Excel importeren</button></form></details></div>
+</div>
+
+<div class="card">
+<h2>2. Vaardigheden / spellen beheren</h2>
+<p class="muted">Voeg een nieuw spel toe zodra iemand daarvoor inzetbaar moet kunnen zijn. Een uitgezette vaardigheid wordt niet gebruikt door de personeelsplanner, maar bestaande antwoorden blijven bewaard voor als je hem later weer aanzet.</p>
+<form class="catalog-form" action="/personnel/skill/save" method="post">
+<div class="field"><label>Nieuwe vaardigheid / spel</label><input name="activity" placeholder="Bijv. Nieuwe activiteit" required></div>
+<div class="field"><label>Opmerking</label><input name="notes" placeholder="Optioneel"></div>
+<div><input type="hidden" name="active" value="on"><button>Vaardigheid toevoegen</button></div>
+</form>
+<div style="overflow-x:auto;margin-top:16px"><table class="catalog"><thead><tr><th>Vaardigheid</th><th>Status</th><th>Opmerking</th><th>Aan/uit</th></tr></thead><tbody>
+{% for sk in refdata.skill_catalog %}
+<tr><td><strong>{{sk.activity}}</strong></td><td>{{'Actief' if sk.active else 'Uitgezet'}}</td><td>{{sk.notes or ''}}</td><td><form action="/personnel/skill/toggle" method="post"><input type="hidden" name="activity" value="{{sk.activity}}"><label class="inline-check"><input type="checkbox" name="active" {% if sk.active %}checked{% endif %} onchange="this.form.submit()"> Gebruiken</label></form></td></tr>
+{% endfor %}
+</tbody></table></div>
+</div>
+
+<div class="card">
+<h2>3. Vast personeelsregister</h2>
+<p class="muted">Klik een medewerker open. Je kunt iemand volledig uit de planning zetten, per weekdeel beschikbaarheid wijzigen en per actief spel aangeven of die persoon het kan uitvoeren.</p>
+{% for e in employees %}
+<details class="employee {% if not e.active %}inactive{% endif %}">
+<summary><span>{{e.name}}</span><span class="summary-right">{{'Actief' if e.active else 'Inactief'}} · rijbewijs {{e.driving_license or 'Onbekend'}} · eigen vervoer {{e.own_transport or 'Onbekend'}}</span></summary>
+<div class="editor"><form action="/personnel/save" method="post">
+<input type="hidden" name="employee_id" value="{{e.id}}">
+<div class="section"><h3>Basisgegevens</h3><div class="grid">
+<div class="field"><label>Naam</label><input name="name" value="{{e.name}}" required></div>
+<div class="field"><label>Rijbewijs</label><select name="driving_license">{% for v in ['Ja','Automaat','Nee','Onbekend'] %}<option value="{{v}}" {% if e.driving_license==v %}selected{% endif %}>{{v}}</option>{% endfor %}</select></div>
+<div class="field"><label>Eigen vervoer</label><select name="own_transport">{% for v in ['Ja','Nee','Onbekend'] %}<option value="{{v}}" {% if e.own_transport==v %}selected{% endif %}>{{v}}</option>{% endfor %}</select></div>
+<div class="field"><label>Opmerking</label><textarea name="notes">{{e.notes}}</textarea></div>
+</div><label class="inline-check"><input type="checkbox" name="active" {% if e.active %}checked{% endif %}> Actief in planning</label></div>
+
+<div class="section"><h3>Vaste beschikbaarheid</h3><p class="small">✓ Beschikbaar = automatisch inzetbaar · ~ In overleg = alleen als nodig · ✕ Niet beschikbaar = nooit automatisch plannen · ? Onbekend = nog controleren.</p>
+{% set profiles=[('', 'fixed', 'VAST', 'profile_fixed'), ('EVEN','even','EVEN week','profile_even'), ('ONEVEN','odd','ONEVEN week','profile_odd')] %}
+{% for mode,prefix,label,checkname in profiles %}
+{% set enabled = mode in e.availability %}
+<div class="profile"><label class="inline-check"><input type="checkbox" name="{{checkname}}" {% if enabled or (mode=='' and not e.availability) %}checked{% endif %}> {{label}} gebruiken</label><div class="slots">
+{% for slot in refdata.slots %}<div class="slot"><label>{{slot}}</label><select name="availability__{{prefix}}__{{slot}}">{% set current=e.availability.get(mode,{}).get(slot,'onbekend') %}{% for value,text in refdata.availability_choices %}<option value="{{value}}" {% if current==value %}selected{% endif %}>{{text}}</option>{% endfor %}</select></div>{% endfor %}
+</div></div>
+{% endfor %}
+</div>
+
+<div class="section"><h3>Vaardigheden per spel</h3><div class="skills">
+{% for activity in refdata.skills %}<div class="skill"><span>{{activity}}</span><select name="skill__{{activity}}">{% set current=e.skills.get(activity,'Onbekend') %}{% for v in refdata.skill_choices %}<option value="{{v}}" {% if current==v %}selected{% endif %}>{{v}}</option>{% endfor %}</select></div>{% endfor %}
+</div></div>
+<div class="actions"><button>Wijzigingen opslaan</button><span class="small">Wordt direct onthouden. Nieuwe en herberekende planningen gebruiken deze gegevens.</span></div>
+</form></div></details>
+{% endfor %}
+</div>
+
+{% if last_import %}<div class="card"><div class="small">Laatste Excel/database-update: {{last_import.imported_at}} · {{last_import.filename}} · {{last_import.row_count}} rij(en)</div></div>{% endif %}
+</div>
+</body>
+</html>

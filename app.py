@@ -302,6 +302,30 @@ def personnel_save():
     except Exception as e:
         return redirect(url_for('personnel',message=f'Opslaan mislukt: {e}'))
 
+@app.post('/personnel/skill/save')
+def personnel_skill_save():
+    try:
+        activity=db.save_personnel_skill(
+            request.form.get('activity',''),
+            request.form.get('active','on')=='on',
+            request.form.get('notes',''),
+        )
+        return redirect(url_for('personnel',message=f'Vaardigheid {activity} opgeslagen.'))
+    except Exception as e:
+        return redirect(url_for('personnel',message=f'Vaardigheid opslaan mislukt: {e}'))
+
+@app.post('/personnel/skill/toggle')
+def personnel_skill_toggle():
+    try:
+        activity=request.form.get('activity','')
+        active=request.form.get('active')=='on'
+        db.set_personnel_skill_active(activity,active)
+        state='actief' if active else 'uitgezet'
+        return redirect(url_for('personnel',message=f'Vaardigheid {activity} {state}.'))
+    except Exception as e:
+        return redirect(url_for('personnel',message=f'Vaardigheid aanpassen mislukt: {e}'))
+
+
 @app.post('/personnel/upload')
 def personnel_upload():
     f=request.files.get('file')
