@@ -172,6 +172,8 @@ def _auto_archive():
     if not db.configured():
         return 0
     try:
+        # v12.2: clean up legacy duplicate dossiers before showing the archive.
+        db.consolidate_duplicate_saved_plans()
         return db.auto_archive_saved_plans(_today_nl())
     except Exception:
         return 0

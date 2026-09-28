@@ -811,8 +811,16 @@ def _plan_dates(rows):
     return min(dates), max(dates)
 
 
+def _normalise_source_filename(value):
+    return (value or '').strip().lower()
+
+
 def create_saved_plan(rows, source_filename=''):
-    """Create a persistent planning dossier immediately after import."""
+    """Get or create one persistent dossier for one imported reception list.
+
+    Re-importing the same source file for the same planning date range updates the
+    existing dossier instead of creating a second planning card.
+    """
     ensure_schema()
     start_date,end_date=_plan_dates(rows)
     if start_date and start_date==end_date:
@@ -821,14 +829,75 @@ def create_saved_plan(rows, source_filename=''):
         title=f'Planning {start_date} t/m {end_date}'
     else:
         title='Nieuwe planning'
+    source_filename=(source_filename or '').strip()
     with connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("""INSERT INTO saved_plans(title,source_filename,start_date,end_date,status,source_rows)
-                VALUES (%s,%s,%s,%s,'concept',%s) RETURNING id""",
-                (title, source_filename or '', start_date, end_date, Jsonb(_json_safe(rows or []))))
-            plan_id=cur.fetchone()['id']
+            if source_filename:
+                cur.execute("""SELECT id FROM saved_plans
+                    WHERE lower(trim(source_filename))=%s
+                    AND start_date IS NOT DISTINCT FROM %s::date
+                    AND end_date IS NOT DISTINCT FROM %s::date
+                    ORDER BY updated_at DESC,id DESC LIMIT 1""",
+                    (_normalise_source_filename(source_filename),start_date,end_date))
+                existing=cur.fetchone()
+            else:
+                existing=None
+            if existing:
+                plan_id=int(existing['id'])
+                cur.execute("""UPDATE saved_plans SET source_rows=%s,start_date=%s,end_date=%s,
+                    source_filename=%s,updated_at=NOW() WHERE id=%s""",
+                    (Jsonb(_json_safe(rows or [])),start_date,end_date,source_filename,plan_id))
+            else:
+                cur.execute("""INSERT INTO saved_plans(title,source_filename,start_date,end_date,status,source_rows)
+                    VALUES (%s,%s,%s,%s,'concept',%s) RETURNING id""",
+                    (title,source_filename,start_date,end_date,Jsonb(_json_safe(rows or []))))
+                plan_id=cur.fetchone()['id']
         conn.commit()
     return int(plan_id)
+
+
+def consolidate_duplicate_saved_plans():
+    """Merge old duplicate dossier rows without discarding their snapshots/history.
+
+    Duplicates are plans with the same non-empty source filename and identical
+    planning date range. The most recently updated row remains the dossier.
+    Snapshots and version history from older rows are copied into its history.
+    """
+    ensure_schema()
+    merged=0
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""SELECT lower(trim(source_filename)) AS source_key,start_date,end_date,
+                       array_agg(id ORDER BY updated_at DESC,id DESC) AS ids
+                FROM saved_plans
+                WHERE trim(COALESCE(source_filename,''))<>''
+                GROUP BY lower(trim(source_filename)),start_date,end_date
+                HAVING COUNT(*)>1""")
+            groups=cur.fetchall()
+            for group in groups:
+                ids=list(group['ids'] or [])
+                if len(ids)<2:
+                    continue
+                keeper=int(ids[0])
+                for duplicate in [int(x) for x in ids[1:]]:
+                    # Preserve every historical version first.
+                    cur.execute("SELECT note,snapshot,created_at FROM saved_plan_versions WHERE plan_id=%s ORDER BY version_no",(duplicate,))
+                    histories=cur.fetchall()
+                    cur.execute("SELECT plan_snapshot,status,archived,archived_at FROM saved_plans WHERE id=%s",(duplicate,))
+                    dup=cur.fetchone()
+                    if dup and dup.get('plan_snapshot') is not None:
+                        histories.append({'note':f'Overgenomen uit samengevoegde planning #{duplicate}',
+                                          'snapshot':dup['plan_snapshot'],'created_at':None})
+                    for hist in histories:
+                        cur.execute("SELECT COALESCE(MAX(version_no),0)+1 AS n FROM saved_plan_versions WHERE plan_id=%s",(keeper,))
+                        n=int(cur.fetchone()['n'])
+                        cur.execute("""INSERT INTO saved_plan_versions(plan_id,version_no,note,snapshot,created_at)
+                            VALUES (%s,%s,%s,%s,COALESCE(%s,NOW()))""",
+                            (keeper,n,hist.get('note') or 'Samengevoegde versie',hist.get('snapshot'),hist.get('created_at')))
+                    cur.execute("DELETE FROM saved_plans WHERE id=%s",(duplicate,))
+                    merged += 1
+        conn.commit()
+    return merged
 
 
 def update_saved_plan_source(plan_id, rows, title=None):
