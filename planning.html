@@ -163,18 +163,16 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 .extra-transport-person label{display:block;font-size:11px;font-weight:800;color:#140821;margin-bottom:4px}
 .transport-help{font-size:11px;color:#6b6472;margin-top:5px;line-height:1.35}
 
-/* v8.9 - volledig geisoleerde dagplanbord-rijen */
+/* v9.1 - echte lane-containers; geen verticale absolute overlap meer */
 .jpday-row{
-  --lane-count:1;
   display:grid!important;
   grid-template-columns:230px minmax(900px,1fr)!important;
-  height:calc(28px + (var(--lane-count) * 132px))!important;
-  min-height:calc(28px + (var(--lane-count) * 132px))!important;
+  height:auto!important;
+  min-height:0!important;
   max-height:none!important;
   align-items:stretch!important;
   overflow:hidden!important;
   position:relative!important;
-  isolation:isolate!important;
   border-bottom:1px solid #f0ebf4!important;
 }
 .jpday-row:last-child{border-bottom:0!important}
@@ -182,31 +180,41 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
   padding:14px!important;
   border-right:1px solid var(--jp-border,#ebe4f2)!important;
   background:#fbf9fd!important;
-  height:100%!important;
   box-sizing:border-box!important;
   overflow:hidden!important;
 }
 .jpday-game strong{display:block!important;font-size:14px!important;color:var(--jp-purple,#140821)!important}
 .jpday-game span{display:block!important;margin-top:4px!important;font-size:11px!important;color:var(--jp-muted,#4d4658)!important}
 .jpday-track{
-  --lane-count:1;
   position:relative!important;
-  height:calc(28px + (var(--lane-count) * 132px))!important;
-  min-height:calc(28px + (var(--lane-count) * 132px))!important;
+  display:flex!important;
+  flex-direction:column!important;
+  gap:12px!important;
+  height:auto!important;
+  min-height:148px!important;
   max-height:none!important;
   overflow:hidden!important;
-  contain:layout paint!important;
   box-sizing:border-box!important;
+  padding:10px 0 14px!important;
   background-image:linear-gradient(to right,#eee8f2 1px,transparent 1px)!important;
   background-size:5.5555556% 100%!important;
 }
+.jpday-lane{
+  position:relative!important;
+  flex:0 0 124px!important;
+  height:124px!important;
+  min-height:124px!important;
+  max-height:124px!important;
+  width:100%!important;
+  overflow:hidden!important;
+}
 .jpday-block{
   position:absolute!important;
-  top:8px;
+  top:0!important;
   min-width:58px!important;
-  height:118px!important;
-  min-height:118px!important;
-  max-height:118px!important;
+  height:124px!important;
+  min-height:124px!important;
+  max-height:124px!important;
   border-radius:8px!important;
   padding:7px 9px!important;
   box-sizing:border-box!important;
@@ -229,7 +237,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 <div class="card">
   <div class="topline">
     <div>
-      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v9.0 · pixelhoogte per spelrij</span></h1>
+      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v9.1 · echte lanes per spelrij</span></h1>
       <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a> · <a href="/personnel">Personeel beheren</a></p>
       <p class="muted">Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen → terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur. Smart Event Manager blijft leidend voor spelstart en speleinde.</p>
     </div>
@@ -540,16 +548,12 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
     if(h) return h + 'u';
     return m + ' min';
   }
-  // Dagplanbord: elke activiteit heeft een eigen vaste horizontale baan.
-  // Alleen overlappende klussen van hetzelfde spel krijgen extra banen onder elkaar.
+  // v9.1 Dagplanbord: echte lane-containers in de normale documentflow.
+  // Verticaal worden blokken dus niet meer absoluut over spelrijen heen gepositioneerd.
   document.querySelectorAll('.jpday-track').forEach(track => {
     const blocks = Array.from(track.querySelectorAll('.jpday-block'));
-    const placed = [];
+    const items = [];
     const laneEnds = [];
-    const LANE_HEIGHT = 124;
-    const LANE_GAP = 12;
-    const TOP_PAD = 10;
-    const BOTTOM_PAD = 14;
 
     blocks.forEach(block => {
       const dur = block.querySelector('.pb-duration');
@@ -563,42 +567,31 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
       if(visibleEnd <= START || visibleStart >= END){ block.style.display = 'none'; return; }
       block.style.left = (((visibleStart - START) / SPAN) * 100) + '%';
       block.style.width = Math.max(((visibleEnd - visibleStart) / SPAN) * 100, 1.7) + '%';
-      block.style.height = LANE_HEIGHT + 'px';
-      block.style.maxHeight = LANE_HEIGHT + 'px';
-      placed.push({block, start:visibleStart, end:visibleEnd, lane:0});
+      items.push({block, start:visibleStart, end:visibleEnd, lane:0});
     });
 
-    placed.sort((a,b) => a.start - b.start || a.end - b.end);
-    placed.forEach(item => {
+    items.sort((a,b) => a.start - b.start || a.end - b.end);
+    items.forEach(item => {
       let lane = laneEnds.findIndex(end => item.start >= end);
-      if(lane === -1){
-        lane = laneEnds.length;
-        laneEnds.push(item.end);
-      } else {
-        laneEnds[lane] = item.end;
-      }
+      if(lane === -1){ lane = laneEnds.length; laneEnds.push(item.end); }
+      else laneEnds[lane] = item.end;
       item.lane = lane;
-      item.block.dataset.lane = lane;
-      item.block.style.top = (TOP_PAD + lane * (LANE_HEIGHT + LANE_GAP)) + 'px';
     });
 
     const laneCount = Math.max(laneEnds.length, 1);
-    const rowHeight = TOP_PAD + laneCount * LANE_HEIGHT + (laneCount - 1) * LANE_GAP + BOTTOM_PAD;
-    track.style.setProperty('--lane-count', String(laneCount));
-    track.style.setProperty('height', rowHeight + 'px', 'important');
-    track.style.setProperty('min-height', rowHeight + 'px', 'important');
-    track.style.setProperty('max-height', rowHeight + 'px', 'important');
-    track.style.setProperty('overflow', 'hidden', 'important');
-    const row = track.closest('.jpday-row');
-    if(row){
-      row.style.setProperty('--lane-count', String(laneCount));
-      row.style.setProperty('height', rowHeight + 'px', 'important');
-      row.style.setProperty('min-height', rowHeight + 'px', 'important');
-      row.style.setProperty('max-height', rowHeight + 'px', 'important');
-      row.style.setProperty('overflow', 'hidden', 'important');
+    const lanes = [];
+    for(let i=0;i<laneCount;i++){
+      const lane = document.createElement('div');
+      lane.className = 'jpday-lane';
+      lane.dataset.lane = String(i);
+      track.appendChild(lane);
+      lanes.push(lane);
     }
+    items.forEach(item => {
+      item.block.dataset.lane = String(item.lane);
+      lanes[item.lane].appendChild(item.block);
+    });
   });
-
 
   // Weekplanning: overlappende klussen binnen dezelfde dag komen naast elkaar in aparte banen.
   document.querySelectorAll('.wb-day').forEach(day => {
@@ -674,37 +667,6 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
     weekView.classList.toggle('active', isWeek);
   }));
 
-  function enforceDayRowHeights(){
-    document.querySelectorAll('.jpday-track').forEach(track => {
-      const blocks = Array.from(track.querySelectorAll('.jpday-block')).filter(b => b.style.display !== 'none');
-      let maxLane = 0;
-      blocks.forEach(b => { maxLane = Math.max(maxLane, Number(b.dataset.lane || 0)); });
-      const laneCount = blocks.length ? maxLane + 1 : 1;
-      const LANE_HEIGHT = 124, LANE_GAP = 12, TOP_PAD = 10, BOTTOM_PAD = 14;
-      const rowHeight = TOP_PAD + laneCount * LANE_HEIGHT + (laneCount - 1) * LANE_GAP + BOTTOM_PAD;
-      track.style.setProperty('--lane-count', String(laneCount));
-      track.style.setProperty('height', rowHeight + 'px', 'important');
-      track.style.setProperty('min-height', rowHeight + 'px', 'important');
-      track.style.setProperty('max-height', rowHeight + 'px', 'important');
-      track.style.setProperty('overflow', 'hidden', 'important');
-      const row = track.closest('.jpday-row');
-      if(row){
-        row.style.setProperty('--lane-count', String(laneCount));
-        row.style.setProperty('height', rowHeight + 'px', 'important');
-        row.style.setProperty('min-height', rowHeight + 'px', 'important');
-        row.style.setProperty('max-height', rowHeight + 'px', 'important');
-        row.style.setProperty('overflow', 'hidden', 'important');
-      }
-    });
-  }
-  enforceDayRowHeights();
-  window.addEventListener('resize', enforceDayRowHeights);
-  // Safari kan de eerste layout-pass uitvoeren voordat de uiteindelijke lettergroottes klaar zijn.
-  // Een tweede en derde pass dwingen de rijhoogtes daarna nogmaals correct af.
-  window.addEventListener('load', () => {
-    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
-    setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
-  });
 })();
 </script>
 
