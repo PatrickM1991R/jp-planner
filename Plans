@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Opgeslagen planningen - JP Planner</title>
+<style>
+:root{
+  --p:#140821;
+  --g:#c9a227;
+  --gd:#ad891d;
+  --bg:#f7f4fb;
+  --b:#ebe4f2;
+  --m:#655c70
+}
+
+*{box-sizing:border-box}
+
+body{
+  font-family:Arial,sans-serif;
+  margin:0;
+  background:var(--bg);
+  color:#17131d
+}
+
+.wrap{
+  max-width:1350px;
+  margin:28px auto;
+  padding:0 24px
+}
+
+.hero{
+  background:linear-gradient(112deg,#140821,#24113f);
+  color:#fff;
+  padding:28px;
+  border-radius:28px;
+  margin-bottom:18px
+}
+
+.hero h1{
+  margin:0 0 7px
+}
+
+.hero a{
+  color:var(--g);
+  font-weight:800;
+  text-decoration:none
+}
+
+.card{
+  background:#fff;
+  border:1px solid var(--b);
+  border-radius:22px;
+  padding:20px;
+  margin-bottom:16px;
+  box-shadow:0 12px 30px rgba(36,17,63,.06)
+}
+
+.tabs{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap
+}
+
+.tab,
+.btn{
+  display:inline-block;
+  border:0;
+  border-radius:999px;
+  padding:10px 15px;
+  text-decoration:none;
+  font-weight:900;
+  cursor:pointer
+}
+
+.tab{
+  background:#fff;
+  border:1px solid var(--b);
+  color:var(--p)
+}
+
+.tab.active,
+.btn{
+  background:var(--g);
+  color:#fff
+}
+
+.btn:hover{
+  background:var(--gd)
+}
+
+.search{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:14px
+}
+
+.search input{
+  min-width:280px;
+  flex:1;
+  padding:10px;
+  border:1px solid #d9d0e3;
+  border-radius:10px
+}
+
+.small{
+  font-size:12px;
+  color:var(--m)
+}
+
+.plan{
+  display:grid;
+  grid-template-columns:
+    minmax(260px,2fr)
+    120px
+    110px
+    155px
+    minmax(250px,1fr);
+  gap:14px;
+  align-items:center;
+  padding:14px 0;
+  border-bottom:1px solid #f0ebf4
+}
+
+.plan:last-child{
+  border-bottom:0
+}
+
+.plan h3{
+  margin:0 0 5px;
+  color:var(--p)
+}
+
+.plan a.open{
+  color:var(--p);
+  text-decoration:none
+}
+
+.actions{
+  display:flex;
+  gap:7px;
+  justify-content:flex-end;
+  flex-wrap:wrap
+}
+
+.actions form{
+  margin:0
+}
+
+.actions button{
+  border:0;
+  border-radius:999px;
+  padding:8px 11px;
+  font-weight:800;
+  cursor:pointer
+}
+
+.archive{
+  background:#fff0b8;
+  color:#6f5311
+}
+
+.restore{
+  background:#dcf7e7;
+  color:#166534
+}
+
+.rename{
+  display:flex;
+  gap:6px;
+  margin-top:7px
+}
+
+.rename input{
+  min-width:140px;
+  padding:7px;
+  border:1px solid #d9d0e3;
+  border-radius:9px
+}
+
+.rename button{
+  background:#140821;
+  color:#fff
+}
+
+.empty{
+  padding:30px;
+  text-align:center;
+  color:var(--m)
+}
+
+@media(max-width:900px){
+  .plan{
+    grid-template-columns:1fr
+  }
+
+  .actions{
+    justify-content:flex-start
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrap">
+
+  <div class="hero">
+
+    <h1>
+      Opgeslagen planningen
+
+      <span
+        style="
+          font-size:12px;
+          background:#fff7d6;
+          color:#140821;
+          padding:5px 8px;
+          border-radius:999px
+        "
+      >
+        v12.0 · archief
+      </span>
+    </h1>
+
+    <div>
+      <a href="/">
+        ← Terug naar JP Planner
+      </a>
+    </div>
+
+    <p
+      style="
+        color:rgba(255,255,255,.78);
+        margin-bottom:0
+      "
+    >
+      Planningen worden automatisch 7 dagen na de laatste planningsdatum
+      naar het archief verplaatst.
+      Je kunt ze altijd opnieuw openen of terugzetten.
+    </p>
+
+  </div>
+
+
+  <div class="card">
+
+    <div class="tabs">
+
+      <a
+        class="tab {% if not archived %}active{% endif %}"
+        href="/plans"
+      >
+        Actuele planningen
+      </a>
+
+      <a
+        class="tab {% if archived %}active{% endif %}"
+        href="/plans?archived=1"
+      >
+        Archief
+      </a>
+
+    </div>
+
+
+    <form
+      class="search"
+      method="get"
+      action="/plans"
+    >
+
+      <input
+        type="hidden"
+        name="archived"
+        value="{{1 if archived else 0}}"
+      >
+
+      <input
+        type="text"
+        name="q"
+        value="{{q}}"
+        placeholder="Zoek op datum, locatie, spel, referentie, medewerker of bestandsnaam"
+      >
+
+      <button
+        class="btn"
+        type="submit"
+      >
+        Zoeken
+      </button>
+
+      {% if q %}
+
+      <a
+        class="tab"
+        href="/plans?archived={{1 if archived else 0}}"
+      >
+        Wis zoekopdracht
+      </a>
+
+      {% endif %}
+
+    </form>
+
+
+    {% if request.args.get('message') %}
+
+    <div
+      style="
+        margin-top:12px;
+        padding:10px;
+        border-radius:10px;
+        background:#edf9f1;
+        color:#166534
+      "
+    >
+      {{request.args.get('message')}}
+    </div>
+
+    {% endif %}
+
+  </div>
+
+
+  <div class="card">
+
+    {% if plans %}
+
+      {% for p in plans %}
+
+      <div class="plan">
+
+
+        <div>
+
+          <h3>
+
+            <a
+              class="open"
+              href="/plans/{{p.id}}"
+            >
+              {{p.title}}
+            </a>
+
+          </h3>
+
+
+          <div class="small">
+
+            {{p.source_filename or 'Geen bestandsnaam'}}
+
+            ·
+
+            {{p.job_count}}
+
+            klus{% if p.job_count != 1 %}sen{% endif %}
+
+          </div>
+
+
+          <form
+            class="rename"
+            action="/plans/{{p.id}}/rename"
+            method="post"
+          >
+
+            <input
+              type="text"
+              name="title"
+              value="{{p.title}}"
+              aria-label="Naam planning"
+            >
+
+            <button type="submit">
+              Naam opslaan
+            </button>
+
+          </form>
+
+        </div>
+
+
+        <div>
+
+          <span class="small">
+            Planning
+          </span>
+
+          <br>
+
+          <strong>
+            {{p.start_date or '—'}}
+          </strong>
+
+          {% if p.end_date and p.end_date != p.start_date %}
+
+          <br>
+
+          <span class="small">
+            t/m {{p.end_date}}
+          </span>
+
+          {% endif %}
+
+        </div>
+
+
+        <div>
+
+          <span class="small">
+            Status
+          </span>
+
+          <br>
+
+          {{p.status}}
+
+        </div>
+
+
+        <div>
+
+          <span class="small">
+            Laatst gewijzigd
+          </span>
+
+          <br>
+
+          {{p.updated_at.strftime('%d-%m-%Y %H:%M') if p.updated_at else '—'}}
+
+        </div>
+
+
+        <div class="actions">
+
+          <a
+            class="tab"
+            href="/plans/{{p.id}}"
+          >
+            Openen
+          </a>
+
+
+          {% if archived %}
+
+          <form
+            action="/plans/{{p.id}}/restore"
+            method="post"
+          >
+
+            <button
+              class="restore"
+              type="submit"
+            >
+              Terug naar actueel
+            </button>
+
+          </form>
+
+          {% else %}
+
+          <form
+            action="/plans/{{p.id}}/archive"
+            method="post"
+          >
+
+            <button
+              class="archive"
+              type="submit"
+            >
+              Naar archief
+            </button>
+
+          </form>
+
+          {% endif %}
+
+        </div>
+
+
+      </div>
+
+      {% endfor %}
+
+    {% else %}
+
+      <div class="empty">
+
+        {% if archived %}
+
+          Nog geen planningen in het archief.
+
+        {% else %}
+
+          Nog geen actuele opgeslagen planningen.
+
+        {% endif %}
+
+      </div>
+
+    {% endif %}
+
+  </div>
+
+</div>
+
+</body>
+</html>
