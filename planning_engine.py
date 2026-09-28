@@ -313,65 +313,100 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, overrides=Non
             chosen_kind = 'fleet'
             chosen = candidates[0]
 
-        # 2) Flexible transport. Automatically this remains the existing own-transport
-        # fallback for standard game sets. Manually the user can also choose an extra
-        # rental car or an extra car supplied by a named employee, with or without a set.
+        # 2) Flexible transport fallback.
+        # Order when automatic planning cannot use a fixed company vehicle:
+        #   own transport -> employee car -> rental car.
+        # The material pickup depot is part of the option so stock remains traceable.
         flexible_candidates = []
         manual_flexible = _is_flexible_transport(override)
-        if chosen is None and (needs_standard or manual_flexible):
-            required_sets = max(1, math.ceil(max(1, pax) / 50)) if needs_standard else 0
+        required_sets = max(1, math.ceil(max(1, pax) / 50)) if needs_standard else 0
+        stock_snapshot = []
+
+        if chosen is None:
             for depot in depot_map.values():
-                possible = []
+                free_sets = total_sets = 0
+                if required_sets:
+                    free_sets, total_sets = available_standard_sets(
+                        depot['code'], required_arrival, available_after
+                    )
+                stock_snapshot.append((depot, free_sets, total_sets))
+
+                if required_sets and free_sets < required_sets:
+                    continue
+
                 if manual_flexible:
                     if _is_own_transport(override):
-                        possible = [('own', _own_code(depot))]
-                    elif _is_rental_car(override):
-                        possible = [('rental', _rental_code(depot))]
+                        possible = [(0, 'own', _own_code(depot))]
                     elif _is_employee_car(override):
-                        possible = [('employee_car', _employee_car_code(depot))]
-                elif needs_standard:
-                    possible = [('own', _own_code(depot))]
+                        possible = [(1, 'employee_car', _employee_car_code(depot))]
+                    elif _is_rental_car(override):
+                        possible = [(2, 'rental', _rental_code(depot))]
+                    else:
+                        possible = []
+                elif override:
+                    # A fixed fleet override was requested. Do not silently replace it.
+                    possible = []
+                else:
+                    possible = [
+                        (0, 'own', _own_code(depot)),
+                        (1, 'employee_car', _employee_car_code(depot)),
+                        (2, 'rental', _rental_code(depot)),
+                    ]
 
-                for flex_kind, code in possible:
+                for priority, flex_kind, code in possible:
                     if override and code != override:
                         continue
-                    total_sets = 0
-                    if required_sets:
-                        free_sets, total_sets = available_standard_sets(depot['code'], required_arrival, available_after)
-                        if free_sets < required_sets:
-                            continue
                     mins, km = travel(depot['address'], location)
                     if mins is None:
                         continue
                     departure = required_arrival - timedelta(minutes=mins)
-                    flexible_candidates.append((km, mins, code, depot, required_sets, departure, total_sets, flex_kind))
+                    flexible_candidates.append((
+                        priority, km, mins, code, depot, required_sets,
+                        departure, total_sets, flex_kind
+                    ))
 
             if flexible_candidates:
-                flexible_candidates.sort(key=lambda x: (x[0], x[1], x[2]))
-                chosen_kind = flexible_candidates[0][7]
+                flexible_candidates.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
+                chosen_kind = flexible_candidates[0][8]
                 chosen = flexible_candidates[0]
 
         if chosen is None:
             if needs_standard:
-                required_sets = max(1, math.ceil(max(1, pax) / 50))
-                depot_details = []
-                for depot in depot_map.values():
-                    free_sets, total_sets = available_standard_sets(depot['code'], required_arrival, available_after)
-                    depot_details.append(f"{depot['name']}: {free_sets}/{total_sets} vrije set(s)")
-                reason = (
-                    f"❗ MATERIAALPROBLEEM: geen vaste bus kan deze opdracht passend uitvoeren en "
-                    f"eigen vervoer heeft {required_sets} standaard spelset(s) nodig. "
-                    + '; '.join(depot_details)
-                )
-                status = 'material_problem'
+                depots_with_stock = [
+                    depot for depot, free_sets, _ in stock_snapshot
+                    if free_sets >= required_sets
+                ]
+                depot_details = [
+                    f"{depot['name']}: {free_sets}/{total_sets} vrije set(s)"
+                    for depot, free_sets, total_sets in stock_snapshot
+                ]
+                if not depots_with_stock:
+                    reason = (
+                        f"❗ MATERIAALPROBLEEM: {required_sets} standaard spelset(s) nodig, "
+                        f"maar er is onvoldoende vrije voorraad tijdens dit tijdvak. "
+                        + '; '.join(depot_details)
+                    )
+                    status = 'material_problem'
+                else:
+                    places = ', '.join(depot['name'] for depot in depots_with_stock)
+                    reason = (
+                        "Geen vaste bus kan deze opdracht passend uitvoeren. "
+                        f"Er is wél voldoende spelmateriaal beschikbaar in {places}. "
+                        "Kies Eigen vervoer, Extra auto medewerker of Extra huurauto en herbereken. "
+                        + '; '.join(depot_details)
+                    )
+                    status = 'unplanned'
             else:
-                reason = 'Geen voertuig kan deze opdracht op tijd bereiken.'
+                reason = (
+                    'Geen vaste bus kan deze opdracht op tijd bereiken. '
+                    'Kies Eigen vervoer, Extra auto medewerker of Extra huurauto en herbereken.'
+                )
                 status = 'unplanned'
             if override:
                 reason += f" Handmatige keuze: {override}."
             plan_jobs.append({
                 **job,
-                'vehicle_code': '',
+                'vehicle_code': override or '',
                 'travel_minutes': None,
                 'travel_km': None,
                 'departure_time': '',
@@ -388,7 +423,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, overrides=Non
         job_warnings = []
 
         if chosen_kind in {'own', 'rental', 'employee_car'}:
-            km, mins, code, depot, required_sets, departure, total_sets, flex_kind = chosen
+            priority, km, mins, code, depot, required_sets, departure, total_sets, flex_kind = chosen
             if required_sets:
                 reserve_standard_sets(depot['code'], required_arrival, available_after, required_sets)
 

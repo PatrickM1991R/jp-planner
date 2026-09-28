@@ -297,7 +297,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 <div class="card">
   <div class="topline">
     <div>
-      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v9.2 · CSS-grid tijdvakken zonder overlap</span></h1>
+      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v9.3 · vervoerfallback + CSS-grid</span></h1>
       <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a> · <a href="/personnel">Personeel beheren</a></p>
       <p class="muted">Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen → terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur. Smart Event Manager blijft leidend voor spelstart en speleinde.</p>
     </div>
@@ -426,7 +426,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 {% if plan.unplanned_jobs %}
 <div class="card unplanned">
   <h2>Nog niet als dienst ingepland</h2>
-  <p class="muted">Deze klussen staan bewust apart. Kies eventueel handmatig een bus of eigen vervoer en klik op Herberekenen.</p>
+  <p class="muted">Deze klussen staan apart omdat de automatische planning nog geen haalbare vaste bus vond. Kies hieronder Eigen vervoer, Extra auto medewerker of Extra huurauto; bij spellen met een standaardset gebruikt JP Planner de vrije voorraad van de gekozen vertrekbasis.</p>
   {% for j in plan.unplanned_jobs %}
   {% set i=j.form_index %}
   <div class="job {% if j.material_problem %}material{% endif %}">

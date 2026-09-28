@@ -155,10 +155,34 @@ def assign_staff_to_plan(plan, employees, manual_overrides=None):
                 score = 100 if level == 'beschikbaar' else 50
                 if last_vehicle.get(e['id']) == vehicle_code and vehicle_code:
                     score += 30
-                if _is_yes(e.get('driving_license')):
-                    score += 5
-                if _is_yes(e.get('own_transport')):
-                    score += 2
+
+                vehicle_text = str(vehicle_code or '')
+                needs_own_car = (
+                    vehicle_text.startswith('Eigen vervoer + spelset')
+                    or vehicle_text.startswith('Extra auto medewerker')
+                )
+                needs_driver = (
+                    vehicle_text.startswith('Extra huurauto')
+                    or (
+                        vehicle_text
+                        and not needs_own_car
+                        and not vehicle_text.startswith('Extra auto medewerker')
+                    )
+                )
+
+                # Make sure the first automatic pick satisfies the transport requirement
+                # whenever such an employee exists. Other staff slots can then be filled
+                # normally by skill + availability.
+                if needs_own_car and _is_yes(e.get('own_transport')):
+                    score += 1000
+                elif needs_driver and _is_yes(e.get('driving_license')):
+                    score += 1000
+                else:
+                    if _is_yes(e.get('driving_license')):
+                        score += 5
+                    if _is_yes(e.get('own_transport')):
+                        score += 2
+
                 candidates.append((score, e, level))
             candidates.sort(key=lambda x: (-x[0], x[1]['name'].casefold()))
             needed = required - len(selected)
