@@ -359,6 +359,28 @@ def fleet_stock_save():
         return redirect(url_for('fleet',message='Voorraad opgeslagen.'))
     except Exception as e:
         return redirect(url_for('fleet',message=f'Voorraad opslaan mislukt: {e}'))
+
+@app.post('/fleet/stock/bulk-save')
+def fleet_stock_bulk_save():
+    try:
+        depot_code=(request.form.get('depot_code') or '').strip()
+        resource_codes=request.form.getlist('resource_code')
+        quantities=request.form.getlist('quantity')
+        capacities=request.form.getlist('capacity_per_set')
+        notes=request.form.getlist('notes')
+        rows=[]
+        for idx, resource_code in enumerate(resource_codes):
+            rows.append({
+                'resource_code': resource_code,
+                'quantity': quantities[idx] if idx < len(quantities) else '0',
+                'capacity_per_set': capacities[idx] if idx < len(capacities) else '0',
+                'notes': notes[idx] if idx < len(notes) else '',
+            })
+        db.save_depot_stock_bulk(depot_code, rows)
+        return redirect(url_for('fleet',message='Extra voorraad voor deze standplaats opgeslagen. Nieuwe en herberekende planningen gebruiken direct deze voorraad.'))
+    except Exception as e:
+        return redirect(url_for('fleet',message=f'Voorraad opslaan mislukt: {e}'))
+
 @app.post('/route-test')
 def route_test():
     origin_text=clean_location_hint(request.form.get('origin','')); destination_text=clean_location_hint(request.form.get('destination',''))

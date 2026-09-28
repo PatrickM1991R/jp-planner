@@ -295,6 +295,43 @@ def save_depot_stock(depot_code, resource_code, quantity, capacity_per_set, note
         conn.commit()
 
 
+
+def save_depot_stock_bulk(depot_code, rows):
+    """Save all editable stock rows for one depot in a single transaction."""
+    depot_code = (depot_code or '').strip()
+    if not depot_code:
+        raise ValueError('Standplaats ontbreekt.')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM depots WHERE code=%s", (depot_code,))
+            if not cur.fetchone():
+                raise ValueError('Onbekende standplaats.')
+            for row in rows:
+                resource_code = (row.get('resource_code') or '').strip()
+                if not resource_code:
+                    continue
+                cur.execute("SELECT resource_name FROM global_resources WHERE resource_code=%s", (resource_code,))
+                resource = cur.fetchone()
+                if not resource:
+                    continue
+                try:
+                    quantity = max(0, int(row.get('quantity') or 0))
+                except (TypeError, ValueError):
+                    quantity = 0
+                try:
+                    capacity_per_set = max(0, int(row.get('capacity_per_set') or 0))
+                except (TypeError, ValueError):
+                    capacity_per_set = 0
+                notes = (row.get('notes') or '').strip()
+                cur.execute("""INSERT INTO depot_stock(depot_code,resource_code,resource_name,quantity,capacity_per_set,notes)
+                    VALUES (%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT(depot_code,resource_code) DO UPDATE SET
+                    resource_name=EXCLUDED.resource_name,quantity=EXCLUDED.quantity,
+                    capacity_per_set=EXCLUDED.capacity_per_set,notes=EXCLUDED.notes""",
+                    (depot_code, resource_code, resource['resource_name'], quantity, capacity_per_set, notes))
+        conn.commit()
+
 def preload_corrections():
     if not configured(): return {}, {}, {}
     ensure_schema()

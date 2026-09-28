@@ -12,7 +12,7 @@
 <body>
 <div class="wrap">
   <div class="hero">
-    <h1>Wagenpark & logistiek <span class="pill" style="background:#fff7d6">v10.1 voorraadregels</span></h1>
+    <h1>Wagenpark & logistiek <span class="pill" style="background:#fff7d6">v10.3 bewerkbare voorraad per standplaats</span></h1>
     <div><a href="/">← Terug naar opdrachten</a> · <a href="/personnel">Personeel</a></div>
     <p style="margin-bottom:0;color:rgba(255,255,255,.78)">Beheer standplaatsen, voertuigen, standaard materiaal per voertuig en voorraad per standplaats. Iedere wijziging die je opslaat wordt in PostgreSQL onthouden en wordt direct gebruikt bij een nieuwe of herberekende planning.</p>
   </div>
@@ -22,25 +22,12 @@
 
   <div class="card">
     <h2>Materiaalregels – huidige basis</h2>
-    <div class="grid">
-      <div class="stock-card" style="margin-top:0">
-        <h3 style="margin-top:0">Standaard in iedere bus · tot 50 personen</h3>
-        <p class="muted" style="line-height:1.7;margin-bottom:0">
-          Ik hou van Holland · De Alleskunner · Minute to Win It · Moordspel · Crazy Bingo ·
-          Boogschieten · Pubquiz · Alles mag vandaag · Expeditie Robinson
-        </p>
-      </div>
-      <div class="stock-card" style="margin-top:0">
-        <h3 style="margin-top:0">Speciale voorraad</h3>
-        <p class="muted" style="line-height:1.7;margin-bottom:0">
-          <strong>Hunted:</strong> 250 personen, altijd pakken<br>
-          <strong>Casino:</strong> 250 personen, 2 sets, altijd pakken<br>
-          <strong>Western Games:</strong> 150 personen, 1 set<br>
-          <strong>Highland Games:</strong> 50 personen per set, 2 sets<br>
-          <strong>VR Game:</strong> 60 personen, 1 set<br>
-          Voor overige spellen gelden geen speciale materiaalregels.
-        </p>
-      </div>
+    <div class="stock-card" style="margin-top:0">
+      <h3 style="margin-top:0">Standaard in iedere bus · tot 50 personen</h3>
+      <p class="muted" style="line-height:1.7;margin-bottom:0">
+        Ik hou van Holland · De Alleskunner · Minute to Win It · Moordspel · Crazy Bingo ·
+        Boogschieten · Pubquiz · Alles mag vandaag · Expeditie Robinson
+      </p>
     </div>
     <p class="muted" style="margin-bottom:0;margin-top:12px"><strong>Personeelsnorm:</strong> 1–30 deelnemers = 1 medewerker · 31–60 = 2 · 61–90 = 3 · daarna steeds +1 medewerker per begonnen groep van 30. Dit blijft per klus handmatig aanpasbaar.</p>
   </div>
@@ -123,32 +110,66 @@
 
   <div class="card">
     <h2>4. Extra voorraad per standplaats</h2>
-    <p class="muted section-note">Per spel leg je vast hoeveel sets er op de standplaats liggen én hoeveel personen één set aankan. Klik op Opslaan na een wijziging; deze voorraad wordt permanent onthouden. De planner gebruikt daarna de nieuwe aantallen en reserveert sets tijdens overlappende diensten.</p>
+    <p class="muted section-note">Geef per spel aan hoeveel extra sets er op deze standplaats liggen en voor hoeveel personen één set geschikt is. De totale capaciteit wordt direct berekend. Klik daarna één keer op <strong>Voorraad standplaats opslaan</strong>. JP Planner bewaart alles in PostgreSQL en gebruikt de nieuwe voorraad meteen bij een nieuwe of herberekende planning.</p>
 
     {% for d in depots %}
-    <div class="stock-card">
-      <h3 style="margin-top:0">{{d.name}} <span class="muted">— {{d.address}}</span></h3>
-      <table class="material-table">
-        <thead><tr><th>Spel / materiaal</th><th>Aantal sets</th><th>Capaciteit per set</th><th>Totale capaciteit</th><th>Notitie</th><th></th></tr></thead>
+    <form class="stock-card depot-stock-form" method="post" action="/fleet/stock/bulk-save">
+      <input type="hidden" name="depot_code" value="{{d.code}}">
+      <div class="vehicle-head">
+        <div>
+          <h3 style="margin:0">{{d.name}}</h3>
+          <div class="muted">{{d.address}}</div>
+        </div>
+        <button type="submit">Voorraad standplaats opslaan</button>
+      </div>
+      <table class="material-table" style="margin-top:12px">
+        <thead>
+          <tr>
+            <th>Spel / materiaal</th>
+            <th>Aantal extra sets</th>
+            <th>Personen per set</th>
+            <th>Totale capaciteit op locatie</th>
+            <th>Notitie</th>
+          </tr>
+        </thead>
         <tbody>
         {% for r in resources %}
           {% set ns=namespace(found=None) %}
-          {% for s in stock %}{% if s.depot_code==d.code and s.resource_code==r.resource_code %}{% set ns.found=s %}{% endif %}{% endfor %}
-          <tr><form method="post" action="/fleet/stock/save">
-            <input type="hidden" name="depot_code" value="{{d.code}}"><input type="hidden" name="resource_code" value="{{r.resource_code}}">
+          {% for st in stock %}{% if st.depot_code==d.code and st.resource_code==r.resource_code %}{% set ns.found=st %}{% endif %}{% endfor %}
+          <tr class="stock-row">
+            <input type="hidden" name="resource_code" value="{{r.resource_code}}">
             <td><strong>{{r.resource_name}}</strong></td>
-            <td><input type="number" min="0" name="quantity" value="{{ns.found.quantity if ns.found else 0}}"></td>
-            <td><input type="number" min="0" name="capacity_per_set" value="{{ns.found.capacity_per_set if ns.found else 50}}"></td>
-            <td>{% if ns.found %}{{(ns.found.quantity or 0) * (ns.found.capacity_per_set or 0)}} personen{% else %}0 personen{% endif %}</td>
-            <td><input name="notes" value="{{ns.found.notes if ns.found else ''}}"></td>
-            <td><button type="submit">Opslaan</button></td>
-          </form></tr>
+            <td><input class="stock-qty" type="number" min="0" step="1" name="quantity" value="{{ns.found.quantity if ns.found else 0}}"></td>
+            <td><input class="stock-cap" type="number" min="0" step="1" name="capacity_per_set" value="{{ns.found.capacity_per_set if ns.found and ns.found.capacity_per_set is not none else 0}}"></td>
+            <td><strong class="stock-total">{{((ns.found.quantity or 0) * (ns.found.capacity_per_set or 0)) if ns.found else 0}} personen</strong></td>
+            <td><input name="notes" value="{{ns.found.notes if ns.found else ''}}" placeholder="Bijv. kast links / altijd pakken"></td>
+          </tr>
         {% endfor %}
         </tbody>
       </table>
-    </div>
+      <div class="muted" style="margin-top:10px">Voorbeeld: 2 sets × 50 personen = 100 personen extra materiaal op deze standplaats. Zet het aantal sets op 0 als dit materiaal hier niet op voorraad ligt.</div>
+      <div style="margin-top:12px"><button type="submit">Voorraad standplaats opslaan</button></div>
+    </form>
     {% endfor %}
   </div>
 </div>
+<script>
+(function(){
+  function refreshRow(row){
+    var q=parseInt((row.querySelector('.stock-qty')||{}).value||'0',10)||0;
+    var c=parseInt((row.querySelector('.stock-cap')||{}).value||'0',10)||0;
+    var total=row.querySelector('.stock-total');
+    if(total) total.textContent=(q*c)+' personen';
+  }
+  document.querySelectorAll('.stock-row').forEach(refreshRow);
+  document.addEventListener('input',function(e){
+    if(e.target && (e.target.classList.contains('stock-qty') || e.target.classList.contains('stock-cap'))){
+      var row=e.target.closest('.stock-row');
+      if(row) refreshRow(row);
+    }
+  });
+})();
+</script>
+
 </body>
 </html>
