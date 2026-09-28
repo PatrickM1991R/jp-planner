@@ -1,6 +1,8 @@
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session
 from dotenv import load_dotenv
 import db
 from location_service import LocationService, LocationServiceError, clean_location_hint
@@ -161,20 +163,100 @@ def enrich_rows(rows):
         row['staff_source']='manual' if saved_staff is not None else 'rule'
     return rows
 
+
+def _today_nl():
+    return datetime.now(ZoneInfo('Europe/Amsterdam')).date().isoformat()
+
+
+def _auto_archive():
+    if not db.configured():
+        return 0
+    try:
+        return db.auto_archive_saved_plans(_today_nl())
+    except Exception:
+        return 0
+
+
+def _current_plan_id(form=None):
+    value=''
+    if form is not None:
+        value=(form.get('planning_id') or '').strip()
+    if not value:
+        value=str(session.get('planning_id') or '').strip()
+    try:
+        return int(value) if value else None
+    except (TypeError,ValueError):
+        return None
+
+
+def _merge_source_rows_from_form(plan_id, form):
+    """Keep the original SEM source, but persist corrections made on screen."""
+    if not plan_id or not db.configured():
+        return
+    record=db.get_saved_plan(plan_id)
+    if not record:
+        return
+    rows=list(record.get('source_rows') or [])
+    try:
+        count=int(form.get('row_count','0') or 0)
+    except ValueError:
+        count=0
+    while len(rows)<count:
+        rows.append({})
+    for i in range(count):
+        row=dict(rows[i] or {})
+        row.update({
+            'date':(form.get(f'date_{i}') or row.get('date') or '').strip(),
+            'start':(form.get(f'start_{i}') or row.get('start') or '').strip(),
+            'end':(form.get(f'end_{i}') or row.get('end') or '').strip(),
+            'participants':(form.get(f'participants_{i}') or row.get('participants') or '').strip(),
+            'activity':(form.get(f'activity_{i}') or row.get('activity') or '').strip(),
+            'location_edit':(form.get(f'location_{i}') or row.get('location_edit') or '').strip(),
+            'location_text':(form.get(f'location_{i}') or row.get('location_text') or '').strip(),
+            'reference':(form.get(f'reference_{i}') or row.get('reference') or '').strip(),
+        })
+        try:
+            row['staff_required']=max(1,int(form.get(f'staff_{i}') or row.get('staff_required') or 1))
+        except (TypeError,ValueError):
+            row['staff_required']=1
+        rows[i]=row
+    db.update_saved_plan_source(plan_id,rows)
+
 def render_home(**kwargs):
-    d={'rows':None,'error':None,'message':None,'route_result':None,'ors_configured':LocationService().configured,'db_configured':db_status(),'personnel_count':db.personnel_count() if db.configured() else 0}; d.update(kwargs); return render_template('index.html',**d)
+    _auto_archive()
+    active_plans=[]
+    if db.configured():
+        try:
+            active_plans=db.list_saved_plans(False,'',12)
+        except Exception:
+            active_plans=[]
+    current_id=kwargs.pop('planning_id',None) or session.get('planning_id')
+    d={'rows':None,'error':None,'message':None,'route_result':None,
+       'ors_configured':LocationService().configured,'db_configured':db_status(),
+       'personnel_count':db.personnel_count() if db.configured() else 0,
+       'active_plans':active_plans,'planning_id':current_id}
+    d.update(kwargs)
+    return render_template('index.html',**d)
 
 @app.get('/')
 def index(): return render_home()
 @app.post('/upload')
 def upload():
     f=request.files.get('file')
-    if not f or not f.filename: return render_home(error='Kies eerst een bestand.')
+    if not f or not f.filename:
+        return render_home(error='Kies eerst een bestand.')
     try:
+        filename=f.filename
         rows=enrich_rows(parse_upload(f))
         rows=_expand_location_labels(rows)
-        return render_home(rows=rows)
-    except Exception as e: return render_home(error=str(e))
+        planning_id=None
+        if db_status():
+            planning_id=db.create_saved_plan(rows,filename)
+            session['planning_id']=planning_id
+        return render_home(rows=rows,planning_id=planning_id,
+                           message='Receptielijst opgeslagen als planningdossier. Je kunt hier later altijd naar terug.')
+    except Exception as e:
+        return render_home(error=str(e))
 @app.post('/save-corrections')
 def save_corrections():
     if not db_status(): return render_home(error='Database is nog niet gekoppeld of bereikbaar.')
@@ -183,8 +265,13 @@ def save_corrections():
         try: staff=max(1,int(request.form.get(f'staff_{i}','1') or 1))
         except ValueError: staff=1
         items.append({'reference':(request.form.get(f'reference_{i}') or '').strip(),'original_activity':(request.form.get(f'original_activity_{i}') or '').strip(),'original_location_hint':(request.form.get(f'original_location_hint_{i}') or '').strip(),'activity':(request.form.get(f'activity_{i}') or '').strip(),'location_text':(request.form.get(f'location_{i}') or '').strip(),'staff_required':staff})
-    try: db.save_corrections_batch(items); return render_home(message=f'{len(items)} regels opgeslagen. Ook het aantal medewerkers wordt onthouden.')
-    except Exception as e: return render_home(error=f'Opslaan mislukt: {e}')
+    try:
+        db.save_corrections_batch(items)
+        plan_id=_current_plan_id(request.form)
+        _merge_source_rows_from_form(plan_id,request.form)
+        return render_home(message=f'{len(items)} regels opgeslagen. Ook het aantal medewerkers en planningdossier worden onthouden.',planning_id=plan_id)
+    except Exception as e:
+        return render_home(error=f'Opslaan mislukt: {e}')
 
 
 def _jobs_from_form(form):
@@ -238,16 +325,80 @@ def _jobs_from_form(form):
 def generate_logistics():
     try:
         jobs,overrides,staff_overrides,depot_overrides=_jobs_from_form(request.form)
-        if not jobs: return render_home(error='Geen opdrachten ontvangen voor de planning.')
+        if not jobs:
+            return render_home(error='Geen opdrachten ontvangen voor de planning.')
         depots,vehicles,stock,resources,vehicle_materials=db.get_logistics()
         plan=build_logistics_plan(jobs,depots,vehicles,stock,resources,vehicle_materials,overrides,depot_overrides)
         employees,_=db.get_personnel() if db.configured() else ([],None)
         plan=assign_staff_to_plan(plan,employees,staff_overrides) if employees else plan
         plan.setdefault('employees',employees)
         plan.setdefault('staff_problem_count',0)
-        return render_template('planning.html',plan=plan)
+        plan_id=_current_plan_id(request.form)
+        if db.configured():
+            if not plan_id:
+                rows=[dict(j) for j in jobs]
+                plan_id=db.create_saved_plan(rows,'Handmatige planning')
+            session['planning_id']=plan_id
+            _merge_source_rows_from_form(plan_id,request.form)
+            db.save_plan_snapshot(plan_id,plan,'Planning herberekend')
+        record=db.get_saved_plan(plan_id) if plan_id and db.configured() else None
+        return render_template('planning.html',plan=plan,planning_id=plan_id,planning_record=record)
     except Exception as e:
         return render_home(error=f'Planning genereren mislukt: {e}')
+
+
+
+@app.get('/plans')
+def plans():
+    _auto_archive()
+    archived=request.args.get('archived','0')=='1'
+    q=(request.args.get('q') or '').strip()
+    plans=db.list_saved_plans(archived,q,250) if db.configured() else []
+    return render_template('plans.html',plans=plans,archived=archived,q=q,error=None)
+
+
+@app.get('/plans/<int:plan_id>')
+def open_saved_plan(plan_id):
+    _auto_archive()
+    record=db.get_saved_plan(plan_id) if db.configured() else None
+    if not record:
+        return render_home(error='Opgeslagen planning niet gevonden.')
+    session['planning_id']=plan_id
+    if record.get('plan_snapshot'):
+        plan=record['plan_snapshot']
+        # Lists/dicts from JSONB are directly usable by Jinja.
+        return render_template('planning.html',plan=plan,planning_id=plan_id,planning_record=record)
+    rows=record.get('source_rows') or []
+    return render_home(rows=rows,planning_id=plan_id,message=f"{record['title']} geopend. Genereer de logistieke planning om verder te gaan.")
+
+
+@app.post('/plans/<int:plan_id>/archive')
+def archive_saved_plan(plan_id):
+    try:
+        db.set_saved_plan_archived(plan_id,True)
+        if session.get('planning_id')==plan_id:
+            session.pop('planning_id',None)
+        return redirect(url_for('plans',message='Planning naar archief verplaatst.'))
+    except Exception as e:
+        return redirect(url_for('plans',message=f'Archiveren mislukt: {e}'))
+
+
+@app.post('/plans/<int:plan_id>/restore')
+def restore_saved_plan(plan_id):
+    try:
+        db.set_saved_plan_archived(plan_id,False)
+        return redirect(url_for('plans',archived='1',message='Planning teruggezet naar actueel.'))
+    except Exception as e:
+        return redirect(url_for('plans',archived='1',message=f'Terugzetten mislukt: {e}'))
+
+
+@app.post('/plans/<int:plan_id>/rename')
+def rename_saved_plan(plan_id):
+    try:
+        db.rename_saved_plan(plan_id,request.form.get('title',''))
+        return redirect(request.referrer or url_for('plans'))
+    except Exception as e:
+        return redirect(url_for('plans',message=f'Naam aanpassen mislukt: {e}'))
 
 
 @app.get('/personnel')

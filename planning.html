@@ -290,10 +290,6 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 .jp92-block.service-colored.pb-bad{outline:2px solid #dc2626;outline-offset:-2px}
 @media(max-width:700px){.jp92-row{grid-template-columns:180px minmax(900px,1fr)!important}}
 
-
-.pickup-alert{margin-top:7px;padding:9px 11px;border-radius:10px;background:#fff7d6;border:2px solid #c9a227;color:#5f4810;font-size:12px;font-weight:900;line-height:1.35}
-.pickup-alert strong{color:#140821}.depot-switch{margin-top:9px;padding:10px 12px;border:1px solid #ebe4f2;border-radius:12px;background:#fbf9fd;max-width:430px}.depot-switch label{display:block;font-size:11px;font-weight:900;color:#140821;margin-bottom:5px}.depot-switch select{max-width:100%}
-.pb-pickup{margin-top:3px;font-weight:900;color:#7a5a00;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 </head>
 <body>
@@ -301,12 +297,31 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 <div class="card">
   <div class="topline">
     <div>
-      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v10.1 · wagenpark + voorraadbeheer</span></h1>
+      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">JP Planner v12.0 · opgeslagen planning + archief</span></h1>
       <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a> · <a href="/personnel">Personeel beheren</a></p>
       <p class="muted">Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen → terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur. Smart Event Manager blijft leidend voor spelstart en speleinde.</p>
     </div>
   </div>
 </div>
+
+{% if planning_record %}
+<div class="card">
+  <div class="topline">
+    <div>
+      <div class="small">Opgeslagen planning</div>
+      <h2 style="margin:3px 0 6px">{{planning_record.title}}</h2>
+      <div class="muted">{{planning_record.source_filename or 'Geen bestandsnaam'}} · laatste wijziging {{planning_record.updated_at.strftime('%d-%m-%Y %H:%M') if planning_record.updated_at else '—'}}</div>
+    </div>
+    <div class="buttonbar">
+      <a href="/plans" style="text-decoration:none;font-weight:800;color:#140821">Alle planningen</a>
+      <a href="/plans?archived=1" style="text-decoration:none;font-weight:800;color:#140821">Archief</a>
+      {% if not planning_record.archived %}
+      <form action="/plans/{{planning_record.id}}/archive" method="post" style="margin:0"><button type="submit">Naar archief</button></form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <div class="card">
   <div class="summary">
@@ -324,6 +339,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 
 <form action="/generate-logistics" method="post">
 <input type="hidden" name="row_count" value="{{plan.jobs|length}}">
+{% if planning_id %}<input type="hidden" name="planning_id" value="{{planning_id}}">{% endif %}
 <div class="card">
   <div class="topline">
     <div><h2 style="margin:0 0 5px">Planning handmatig aanpassen</h2><div class="muted">Wijzig per klus de bus, eigen vervoer, start/eindtijd, opbouw of opruimtijd. Klik daarna op Herberekenen; JP Planner bouwt alle diensten en routes opnieuw op.</div></div>
@@ -338,13 +354,6 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
       <div class="date-head">{{r.date}}</div>
       <h2>Dienst {{r.service_number}} — {{r.vehicle_code}}{% if r.own_transport %} · eigen vervoer{% endif %}</h2>
       <div class="meta"><strong>{{r.depot_name}}</strong> — {{r.depot_address}}</div>
-      <div class="depot-switch">
-        <label>Vertrekstandplaats voor deze dienst</label>
-        <select class="service-depot-select">
-          {% for d in plan.depots %}<option value="{{d.code}}" {% if d.code==r.depot_code %}selected{% endif %}>{{d.name}} — {{d.address}}</option>{% endfor %}
-        </select>
-        <div class="small" style="margin-top:5px">Wijzig hier de vertrek-/terugkeerstandplaats en klik daarna op Herbereken volledige planning.</div>
-      </div>
       {% if r.staff_names %}<div class="meta"><strong>Personeel dienst:</strong> {{r.staff_names|join(", ")}}</div>{% endif %}
       {% if r.staff_duty %}
       <div class="meta" style="margin-top:6px">
@@ -428,7 +437,6 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
         <h3>{{j.departure_time}} vertrek</h3>
         {% if j.travel_km is not none %}<div>{{j.travel_km}} km · {{j.travel_minutes}} min</div>{% else %}<div>—</div>{% endif %}
         {% if j.status=='planned_own_transport' %}<div class="ok">Eigen vervoer + voorraadset</div>{% elif j.status=='planned_rental_car' %}<div class="ok">Extra huurauto ingepland</div>{% elif j.status=='planned_employee_car' %}<div class="ok">Extra auto medewerker ingepland{% if j.transport_employee %}: {{j.transport_employee}}{% endif %}</div>{% endif %}
-        {% if j.pickup_material_required %}<div class="pickup-alert">⚠️ <strong>LET OP: materiaal pakken</strong> — {{j.pickup_material_label}}</div>{% endif %}
         {% for w in j.warnings %}<div class="warn">{{w}}</div>{% endfor %}
       </div>
     </div>
@@ -439,7 +447,6 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
   <input type="hidden" name="activity_{{i}}" value="{{j.activity}}">
   <input type="hidden" name="location_{{i}}" value="{{j.location_text}}">
   <input type="hidden" name="reference_{{i}}" value="{{j.reference}}">
-  <input type="hidden" name="depot_override_{{i}}" value="{{r.depot_code}}">
   {% endfor %}
 </div>
 {% endfor %}
@@ -455,9 +462,9 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
       <div><div class="small">Datum / tijd</div><h3>{{j.date}}</h3><div class="game-time-badge">Spel: {{j.start}}–{{j.end}}</div><div>{{j.arrival_time}} aanwezig</div></div>
       <div><div class="small">Werkblok</div><div class="fieldline"><label>Opbouw</label><input type="number" min="0" name="setup_{{i}}" value="{{j.setup_minutes}}"> min</div><div class="fieldline"><label>Opruimen</label><input type="number" min="0" name="cleanup_{{i}}" value="{{j.cleanup_minutes}}"> min</div><input type="hidden" name="start_{{i}}" value="{{j.start}}"><input type="hidden" name="end_{{i}}" value="{{j.end}}"></div>
       <div><div class="small">Klus</div><h3>{{j.activity}}</h3><div>{{j.location_text}}</div><div class="small">Ref. {{j.reference}}</div></div>
-      <div><div class="small">Bus / vervoer handmatig</div><select name="override_{{i}}"><option value="">Automatisch</option>{% for v in plan.vehicles %}<option value="{{v.code}}" {% if j.vehicle_code==v.code %}selected{% endif %}>{{v.code}}</option>{% endfor %}</select><div class="small" style="margin-top:8px">Vertrekstandplaats</div><select name="depot_override_{{i}}"><option value="">Standaard van voertuig</option>{% for d in plan.depots %}<option value="{{d.code}}" {% if j.depot_override==d.code %}selected{% endif %}>{{d.name}} — {{d.address}}</option>{% endfor %}</select><div class="extra-transport-person" data-extra-employee-wrap="{{i}}"><label>Welke medewerker stelt de extra auto beschikbaar?</label><select name="extra_car_employee_{{i}}" data-extra-employee="{{i}}"><option value="">Kies medewerker</option>{% for e in plan.employees %}<option value="{{e.name}}" {% if j.transport_employee==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}</select><div class="transport-help">Alleen nodig bij Extra auto medewerker.</div></div></div>
+      <div><div class="small">Bus / vervoer handmatig</div><select name="override_{{i}}"><option value="">Automatisch</option>{% for v in plan.vehicles %}<option value="{{v.code}}" {% if j.vehicle_code==v.code %}selected{% endif %}>{{v.code}}</option>{% endfor %}</select><div class="extra-transport-person" data-extra-employee-wrap="{{i}}"><label>Welke medewerker stelt de extra auto beschikbaar?</label><select name="extra_car_employee_{{i}}" data-extra-employee="{{i}}"><option value="">Kies medewerker</option>{% for e in plan.employees %}<option value="{{e.name}}" {% if j.transport_employee==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}</select><div class="transport-help">Alleen nodig bij Extra auto medewerker.</div></div></div>
       <div><div class="small">Bezetting</div><h3>{{j.participants}} pers.</h3><div class="fieldline"><label>Aantal</label><input type="number" min="1" name="staff_{{i}}" value="{{j.staff_required}}"></div>{% if plan.employees %}{% for n in range(j.staff_required) %}<div class="fieldline"><label>Med. {{n+1}}</label><select name="staff_person_{{i}}_{{n}}"><option value="">Automatisch kiezen</option>{% for e in plan.employees %}<option value="{{e.name}}" {% if j.staff_names and n < j.staff_names|length and j.staff_names[n]==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}</select></div>{% endfor %}{% if j.staff_names %}<div class="small"><strong>Collega('s):</strong> {{j.staff_names|join(', ')}}</div>{% endif %}{% for w in j.staff_warnings %}<div class="warn">{{w}}</div>{% endfor %}{% else %}<div class="warn">Nog geen personeel geïmporteerd.</div>{% endif %}</div>
-      <div>{% if j.pickup_material_required %}<div class="pickup-alert">⚠️ <strong>LET OP: materiaal pakken</strong> — {{j.pickup_material_label}}</div>{% endif %}{% if j.material_problem %}<div class="bad"><strong>❗ MATERIAALPROBLEEM</strong></div>{% else %}<div class="bad">Niet ingepland</div>{% endif %}{% for w in j.warnings %}<div class="warn">{{w}}</div>{% endfor %}</div>
+      <div>{% if j.material_problem %}<div class="bad"><strong>❗ MATERIAALPROBLEEM</strong></div>{% else %}<div class="bad">Niet ingepland</div>{% endif %}{% for w in j.warnings %}<div class="warn">{{w}}</div>{% endfor %}</div>
     </div>
   </div>
   <input type="hidden" name="date_{{i}}" value="{{j.date}}">
@@ -538,7 +545,6 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
               <div class="pb-meta">Opbouw {{j.setup_minutes}} min</div>
               <div class="pb-main">SPEL {{j.start}}–{{j.end}} · <span class="pb-duration"></span></div>
               <div class="pb-meta">Opruimen {{j.cleanup_minutes}} min · beschikbaar {{j.available_time or '—'}}</div>
-              {% if j.pickup_material_required %}<div class="pb-pickup">⚠️ PAKKEN: {{j.pickup_material_label}}</div>{% endif %}
               <div class="pb-meta">{% if j.staff_names %}{{j.staff_names|join(', ')}}{% else %}Nog geen medewerker{% endif %} · {{r.vehicle_code}}</div>
               <div class="pb-meta">{{j.location_text}}</div>
             </div>
@@ -612,7 +618,6 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
                 <div class="wb-meta">Vertrek {{j.departure_time or '—'}} · rit {% if j.travel_minutes is not none %}{{j.travel_minutes}} min{% else %}—{% endif %} · opbouw {{j.setup_minutes}} min</div>
                 <div class="wb-meta"><strong>SPEL {{j.start}}–{{j.end}} · <span class="wb-duration"></span></strong></div>
                 <div class="wb-meta">Opruimen {{j.cleanup_minutes}} min · beschikbaar {{j.available_time or '—'}}</div>
-                {% if j.pickup_material_required %}<div class="wb-meta"><strong>⚠️ PAKKEN: {{j.pickup_material_label}}</strong></div>{% endif %}
                 <div class="wb-meta">{% if j.staff_names %}{{j.staff_names|join(', ')}}{% else %}Nog geen medewerker{% endif %} · {% if j.vehicle_code %}{{j.vehicle_code}}{% else %}Nog geen voertuig{% endif %}</div>
                 <div class="wb-meta">{{j.location_text}}</div>
               </div>
@@ -793,18 +798,6 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
     if(e.target && e.target.matches('select[name^="override_"]')) refreshExtraTransport();
   });
   refreshExtraTransport();
-})();
-</script>
-
-<script>
-(function(){
-  document.querySelectorAll('.service-depot-select').forEach(function(sel){
-    sel.addEventListener('change',function(){
-      var service=sel.closest('.service');
-      if(!service) return;
-      service.querySelectorAll('input[name^="depot_override_"]').forEach(function(inp){ inp.value=sel.value; });
-    });
-  });
 })();
 </script>
 </body>

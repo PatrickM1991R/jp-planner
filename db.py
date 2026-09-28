@@ -1,9 +1,11 @@
 import os
 import re
+import json
 from contextlib import contextmanager
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from personnel_seed import PERSONNEL_SEED, PERSONNEL_SKILLS, AVAILABILITY_SLOTS
 
@@ -92,6 +94,32 @@ def ensure_schema():
                 CREATE TABLE IF NOT EXISTS system_migrations (
                     migration_key TEXT PRIMARY KEY,
                     applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )""")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS saved_plans (
+                    id BIGSERIAL PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    source_filename TEXT NOT NULL DEFAULT '',
+                    start_date DATE,
+                    end_date DATE,
+                    status TEXT NOT NULL DEFAULT 'concept',
+                    archived BOOLEAN NOT NULL DEFAULT FALSE,
+                    archived_at TIMESTAMPTZ,
+                    source_rows JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    plan_snapshot JSONB,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )""")
+            cur.execute("CREATE INDEX IF NOT EXISTS saved_plans_active_idx ON saved_plans(archived,start_date DESC,updated_at DESC)")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS saved_plan_versions (
+                    id BIGSERIAL PRIMARY KEY,
+                    plan_id BIGINT NOT NULL REFERENCES saved_plans(id) ON DELETE CASCADE,
+                    version_no INTEGER NOT NULL,
+                    note TEXT NOT NULL DEFAULT '',
+                    snapshot JSONB,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE(plan_id,version_no)
                 )""")
         conn.commit()
     seed_logistics()
@@ -761,3 +789,152 @@ def personnel_count():
             cur.execute("SELECT COUNT(*) AS n FROM employees WHERE active=TRUE")
             row = cur.fetchone()
     return int(row['n']) if row else 0
+
+
+# ---------------------------------------------------------------------------
+# Persistent planning archive (v12.0)
+# ---------------------------------------------------------------------------
+
+def _json_safe(value):
+    """Return a JSON-serialisable copy for PostgreSQL JSONB."""
+    return json.loads(json.dumps(value, default=str))
+
+
+def _plan_dates(rows):
+    dates=[]
+    for row in rows or []:
+        value=str(row.get('date') or '').strip()
+        if re.fullmatch(r'\d{4}-\d{2}-\d{2}', value):
+            dates.append(value)
+    if not dates:
+        return None, None
+    return min(dates), max(dates)
+
+
+def create_saved_plan(rows, source_filename=''):
+    """Create a persistent planning dossier immediately after import."""
+    ensure_schema()
+    start_date,end_date=_plan_dates(rows)
+    if start_date and start_date==end_date:
+        title=f'Planning {start_date}'
+    elif start_date and end_date:
+        title=f'Planning {start_date} t/m {end_date}'
+    else:
+        title='Nieuwe planning'
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""INSERT INTO saved_plans(title,source_filename,start_date,end_date,status,source_rows)
+                VALUES (%s,%s,%s,%s,'concept',%s) RETURNING id""",
+                (title, source_filename or '', start_date, end_date, Jsonb(_json_safe(rows or []))))
+            plan_id=cur.fetchone()['id']
+        conn.commit()
+    return int(plan_id)
+
+
+def update_saved_plan_source(plan_id, rows, title=None):
+    if not plan_id:
+        return
+    ensure_schema()
+    start_date,end_date=_plan_dates(rows)
+    with connection() as conn:
+        with conn.cursor() as cur:
+            if title:
+                cur.execute("""UPDATE saved_plans SET title=%s,start_date=%s,end_date=%s,
+                    source_rows=%s,updated_at=NOW() WHERE id=%s""",
+                    (title,start_date,end_date,Jsonb(_json_safe(rows or [])),int(plan_id)))
+            else:
+                cur.execute("""UPDATE saved_plans SET start_date=%s,end_date=%s,
+                    source_rows=%s,updated_at=NOW() WHERE id=%s""",
+                    (start_date,end_date,Jsonb(_json_safe(rows or [])),int(plan_id)))
+        conn.commit()
+
+
+def save_plan_snapshot(plan_id, plan, note='Planning herberekend'):
+    """Save current planning and append an immutable history version."""
+    if not plan_id:
+        return
+    ensure_schema()
+    snapshot=_json_safe(plan or {})
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE saved_plans SET plan_snapshot=%s,status='gepland',updated_at=NOW()
+                WHERE id=%s""", (Jsonb(snapshot),int(plan_id)))
+            cur.execute("SELECT COALESCE(MAX(version_no),0)+1 AS n FROM saved_plan_versions WHERE plan_id=%s", (int(plan_id),))
+            version_no=int(cur.fetchone()['n'])
+            cur.execute("""INSERT INTO saved_plan_versions(plan_id,version_no,note,snapshot)
+                VALUES (%s,%s,%s,%s)""", (int(plan_id),version_no,note or '',Jsonb(snapshot)))
+        conn.commit()
+
+
+def get_saved_plan(plan_id):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM saved_plans WHERE id=%s", (int(plan_id),))
+            row=cur.fetchone()
+    return dict(row) if row else None
+
+
+def list_saved_plans(archived=False, search='', limit=100):
+    ensure_schema()
+    search=(search or '').strip()
+    params=[bool(archived)]
+    where="archived=%s"
+    if search:
+        token=f'%{search}%'
+        where += " AND (title ILIKE %s OR source_filename ILIKE %s OR source_rows::text ILIKE %s OR COALESCE(plan_snapshot::text,'') ILIKE %s)"
+        params.extend([token,token,token,token])
+    params.append(int(limit))
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"""SELECT id,title,source_filename,start_date,end_date,status,archived,archived_at,
+                created_at,updated_at,jsonb_array_length(source_rows) AS job_count
+                FROM saved_plans WHERE {where}
+                ORDER BY COALESCE(end_date,start_date) DESC NULLS LAST, updated_at DESC LIMIT %s""", params)
+            rows=[dict(r) for r in cur.fetchall()]
+    return rows
+
+
+def auto_archive_saved_plans(today_iso):
+    """Archive plans on day 8: planning end date + 7 days <= today."""
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE saved_plans
+                SET archived=TRUE,archived_at=COALESCE(archived_at,NOW()),updated_at=NOW()
+                WHERE archived=FALSE AND end_date IS NOT NULL
+                AND (end_date + INTERVAL '7 days')::date <= %s::date""", (today_iso,))
+            changed=cur.rowcount
+        conn.commit()
+    return changed
+
+
+def set_saved_plan_archived(plan_id, archived=True):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            if archived:
+                cur.execute("""UPDATE saved_plans SET archived=TRUE,archived_at=NOW(),updated_at=NOW() WHERE id=%s""", (int(plan_id),))
+            else:
+                cur.execute("""UPDATE saved_plans SET archived=FALSE,archived_at=NULL,updated_at=NOW() WHERE id=%s""", (int(plan_id),))
+        conn.commit()
+
+
+def rename_saved_plan(plan_id, title):
+    title=(title or '').strip()
+    if not title:
+        raise ValueError('Naam van de planning mag niet leeg zijn.')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE saved_plans SET title=%s,updated_at=NOW() WHERE id=%s", (title,int(plan_id)))
+        conn.commit()
+
+
+def list_saved_plan_versions(plan_id, limit=20):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""SELECT id,version_no,note,created_at FROM saved_plan_versions
+                WHERE plan_id=%s ORDER BY version_no DESC LIMIT %s""", (int(plan_id),int(limit)))
+            return [dict(r) for r in cur.fetchall()]

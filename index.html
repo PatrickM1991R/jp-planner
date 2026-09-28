@@ -5,18 +5,44 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>JP Planner</title>
 <style>
-body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wrap{max-width:1450px;margin:36px auto;padding:0 24px}.card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 2px 14px rgba(0,0,0,.08);margin-bottom:22px}.muted{color:#667085}.grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}@media(max-width:850px){.grid{grid-template-columns:1fr}}button{padding:10px 16px;border:0;border-radius:8px;background:#1f2937;color:#fff;cursor:pointer}input[type=file],input[type=text]{padding:9px;border:1px solid #d0d5dd;border-radius:8px;margin-right:8px}.route-form{display:flex;gap:10px;flex-wrap:wrap}.route-form input{min-width:240px;flex:1}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}th{background:#f9fafb;position:sticky;top:0}.scroll{overflow:auto;max-height:680px}.error{background:#fee2e2;padding:12px;border-radius:8px;margin:12px 0}.ok{background:#dcfce7;padding:12px;border-radius:8px;margin:8px 0}.warn{background:#fef3c7;padding:12px;border-radius:8px;margin:8px 0}.badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:bold}.b-ok{background:#dcfce7;color:#166534}.b-warn{background:#fef3c7;color:#92400e}.b-bad{background:#fee2e2;color:#991b1b}.summary{display:flex;gap:28px;flex-wrap:wrap}.summary strong{display:block;font-size:28px}.small{font-size:12px;color:#667085}.edit-input{width:240px;max-width:100%;box-sizing:border-box}.location-input{width:360px;max-width:100%;box-sizing:border-box}.actions{display:flex;align-items:center;gap:12px;margin:14px 0}.source{font-size:11px;color:#667085;display:block;margin-top:4px}
+body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wrap{max-width:1450px;margin:36px auto;padding:0 24px}.card{background:#fff;border-radius:14px;padding:24px;box-shadow:0 2px 14px rgba(0,0,0,.08);margin-bottom:22px}.muted{color:#667085}.grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}@media(max-width:850px){.grid{grid-template-columns:1fr}}button{padding:10px 16px;border:0;border-radius:8px;background:#1f2937;color:#fff;cursor:pointer}input[type=file],input[type=text]{padding:9px;border:1px solid #d0d5dd;border-radius:8px;margin-right:8px}.route-form{display:flex;gap:10px;flex-wrap:wrap}.route-form input{min-width:240px;flex:1}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:9px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top}th{background:#f9fafb;position:sticky;top:0}.scroll{overflow:auto;max-height:680px}.error{background:#fee2e2;padding:12px;border-radius:8px;margin:12px 0}.ok{background:#dcfce7;padding:12px;border-radius:8px;margin:8px 0}.warn{background:#fef3c7;padding:12px;border-radius:8px;margin:8px 0}.badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:bold}.b-ok{background:#dcfce7;color:#166534}.b-warn{background:#fef3c7;color:#92400e}.b-bad{background:#fee2e2;color:#991b1b}.summary{display:flex;gap:28px;flex-wrap:wrap}.summary strong{display:block;font-size:28px}.small{font-size:12px;color:#667085}.edit-input{width:240px;max-width:100%;box-sizing:border-box}.location-input{width:360px;max-width:100%;box-sizing:border-box}.actions{display:flex;align-items:center;gap:12px;margin:14px 0}.source{font-size:11px;color:#667085;display:block;margin-top:4px}.plan-list{display:grid;gap:10px}.plan-row{display:grid;grid-template-columns:minmax(220px,1.5fr) 120px 120px 150px auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid #ebe4f2;border-radius:12px}.plan-row a{font-weight:800;color:#140821;text-decoration:none}.plan-actions{display:flex;gap:7px;justify-content:flex-end}.plan-actions form{margin:0}.linkbtn{display:inline-block;padding:9px 14px;border-radius:999px;background:#c9a227;color:#fff!important;text-decoration:none;font-weight:800}@media(max-width:800px){.plan-row{grid-template-columns:1fr}.plan-actions{justify-content:flex-start}}
 </style>
 </head>
 <body><div class="wrap">
 <div class="card">
 <h1>JP Planner</h1>
-<p class="muted">Opdrachten herkennen, corrigeren, onthouden en autoroutes berekenen.</p><p><a href="/fleet"><strong>Wagenpark & logistiek beheren →</strong></a> · <a href="/personnel"><strong>Personeel beheren →</strong></a></p>
+<p class="muted">Opdrachten herkennen, corrigeren, onthouden en autoroutes berekenen.</p><p><a href="/fleet"><strong>Wagenpark & logistiek beheren →</strong></a> · <a href="/personnel"><strong>Personeel beheren →</strong></a> · <a href="/plans"><strong>Opgeslagen planningen →</strong></a> · <a href="/plans?archived=1"><strong>Archief →</strong></a></p>
 {% if ors_configured %}<div class="ok">OpenRouteService is gekoppeld — profiel: <strong>driving-car</strong>.</div>{% else %}<div class="warn">ORS_API_KEY ontbreekt.</div>{% endif %}
 {% if db_configured %}<div class="ok">Database is gekoppeld — correcties kunnen permanent worden opgeslagen.</div>{% else %}<div class="warn">DATABASE_URL ontbreekt of database is niet bereikbaar.</div>{% endif %}{% if personnel_count %}<div class="ok">Personeelsregister gekoppeld — <strong>{{personnel_count}}</strong> actieve medewerker(s).</div>{% else %}<div class="warn">Nog geen personeel geïmporteerd. Upload het personeelsbestand via <a href="/personnel">Personeel beheren</a>.</div>{% endif %}
 {% if error %}<div class="error">{{error}}</div>{% endif %}
 {% if message %}<div class="ok">{{message}}</div>{% endif %}
 </div>
+
+{% if active_plans %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap">
+    <div>
+      <h2 style="margin:0 0 5px">Opgeslagen planningen</h2>
+      <div class="small">Actuele planningen blijven hier staan. Ze gaan automatisch 7 dagen na de laatste planningsdatum naar het archief.</div>
+    </div>
+    <div><a class="linkbtn" href="/plans">Alle planningen</a> <a class="linkbtn" href="/plans?archived=1">Archief</a></div>
+  </div>
+  <div class="plan-list" style="margin-top:14px">
+  {% for p in active_plans %}
+    <div class="plan-row">
+      <div><a href="/plans/{{p.id}}">{{p.title}}</a><div class="small">{{p.source_filename or 'Geen bestandsnaam'}} · {{p.job_count}} klus{% if p.job_count != 1 %}sen{% endif %}</div></div>
+      <div><span class="small">Datum</span><br><strong>{{p.start_date or '—'}}</strong></div>
+      <div><span class="small">Status</span><br>{{p.status}}</div>
+      <div><span class="small">Gewijzigd</span><br>{{p.updated_at.strftime('%d-%m-%Y %H:%M') if p.updated_at else '—'}}</div>
+      <div class="plan-actions">
+        <a href="/plans/{{p.id}}">Openen</a>
+        <form action="/plans/{{p.id}}/archive" method="post"><button type="submit">Archiveren</button></form>
+      </div>
+    </div>
+  {% endfor %}
+  </div>
+</div>
+{% endif %}
 
 <div class="grid">
 <div class="card">
@@ -51,6 +77,7 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}.wra
 <p class="muted">Controleer vooral de twee witte velden <strong>Spel</strong> en <strong>Locatie / adres</strong>. Pas ze aan waar nodig en klik daarna op <strong>Correcties opslaan</strong>.</p>
 <form action="/save-corrections" method="post">
 <input type="hidden" name="row_count" value="{{rows|length}}">
+{% if planning_id %}<input type="hidden" name="planning_id" value="{{planning_id}}">{% endif %}
 <div class="actions"><button type="submit">Correcties opslaan</button><button type="submit" formaction="/generate-logistics" formmethod="post">Genereer logistieke planning</button><span class="small">De planning gebruikt je huidige Spel-, Locatie- en Medewerkersvelden.</span></div>
 <div class="scroll"><table><tr><th>Datum</th><th>Tijd</th><th>Aantal</th><th>Medewerkers</th><th>Spel</th><th>Locatie / adres</th><th>Status</th><th>Gevonden locatie</th><th>Omschrijving</th><th>Ref.</th></tr>
 {% for r in rows %}<tr>
