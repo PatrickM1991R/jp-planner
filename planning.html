@@ -229,7 +229,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 <div class="card">
   <div class="topline">
     <div>
-      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v8.9 · eigen rijen zonder CSS-conflict</span></h1>
+      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v9.0 · pixelhoogte per spelrij</span></h1>
       <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a> · <a href="/personnel">Personeel beheren</a></p>
       <p class="muted">Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen → terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur. Smart Event Manager blijft leidend voor spelstart en speleinde.</p>
     </div>
@@ -585,9 +585,17 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
     const laneCount = Math.max(laneEnds.length, 1);
     const rowHeight = TOP_PAD + laneCount * LANE_HEIGHT + (laneCount - 1) * LANE_GAP + BOTTOM_PAD;
     track.style.setProperty('--lane-count', String(laneCount));
+    track.style.setProperty('height', rowHeight + 'px', 'important');
+    track.style.setProperty('min-height', rowHeight + 'px', 'important');
+    track.style.setProperty('max-height', rowHeight + 'px', 'important');
+    track.style.setProperty('overflow', 'hidden', 'important');
     const row = track.closest('.jpday-row');
     if(row){
       row.style.setProperty('--lane-count', String(laneCount));
+      row.style.setProperty('height', rowHeight + 'px', 'important');
+      row.style.setProperty('min-height', rowHeight + 'px', 'important');
+      row.style.setProperty('max-height', rowHeight + 'px', 'important');
+      row.style.setProperty('overflow', 'hidden', 'important');
     }
   });
 
@@ -672,10 +680,20 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
       let maxLane = 0;
       blocks.forEach(b => { maxLane = Math.max(maxLane, Number(b.dataset.lane || 0)); });
       const laneCount = blocks.length ? maxLane + 1 : 1;
+      const LANE_HEIGHT = 124, LANE_GAP = 12, TOP_PAD = 10, BOTTOM_PAD = 14;
+      const rowHeight = TOP_PAD + laneCount * LANE_HEIGHT + (laneCount - 1) * LANE_GAP + BOTTOM_PAD;
       track.style.setProperty('--lane-count', String(laneCount));
+      track.style.setProperty('height', rowHeight + 'px', 'important');
+      track.style.setProperty('min-height', rowHeight + 'px', 'important');
+      track.style.setProperty('max-height', rowHeight + 'px', 'important');
+      track.style.setProperty('overflow', 'hidden', 'important');
       const row = track.closest('.jpday-row');
       if(row){
         row.style.setProperty('--lane-count', String(laneCount));
+        row.style.setProperty('height', rowHeight + 'px', 'important');
+        row.style.setProperty('min-height', rowHeight + 'px', 'important');
+        row.style.setProperty('max-height', rowHeight + 'px', 'important');
+        row.style.setProperty('overflow', 'hidden', 'important');
       }
     });
   }
