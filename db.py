@@ -88,6 +88,11 @@ def ensure_schema():
                     label TEXT, lat DOUBLE PRECISION NOT NULL, lon DOUBLE PRECISION NOT NULL,
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )""")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS system_migrations (
+                    migration_key TEXT PRIMARY KEY,
+                    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )""")
         conn.commit()
     seed_logistics()
     seed_personnel_defaults()
@@ -104,12 +109,12 @@ MATERIAL_CATALOG = [
     ('EXPEDITIE_ROBINSON', 'Expeditie Robinson'),
     ('BOOGSCHIETEN', 'Boogschieten'),
     ('HUNTED', 'Hunted'),
-    ('HIDDEN_GAMES', 'Hidden Games'),
     ('CASINO', 'Casino'),
     ('WESTERN_GAMES', 'Western Games'),
-    ('JONGENS_TEGEN_DE_MEISJES', 'Jongens tegen de Meisjes'),
     ('HIGHLAND_GAMES', 'Highland Games'),
+    ('VR_GAME', 'VR Game'),
 ]
+
 
 BUS_STANDARD_CODES = {
     'IK_HOU_VAN_HOLLAND', 'ALLESKUNNER', 'MINUTE_TO_WIN_IT', 'MOORDSPEL',
@@ -163,16 +168,14 @@ def seed_logistics():
                 resource_name = name_by_code[resource_code]
                 defaults.append(('ASSEN', resource_code, resource_name, 2, 50, 'Extra voorraad'))
                 defaults.append(('HOLLANDSCHEVELD', resource_code, resource_name, 1, 50, 'Extra voorraad'))
-            # Specific pickup-only totals requested by JP Activiteiten.
+            # Definitieve speciale materialen. Ze liggen NIET standaard in de bus.
+            # Deze startwaarden zijn na installatie volledig bewerkbaar via Wagenpark & Logistiek.
             defaults.extend([
-                ('ASSEN','HUNTED','Hunted',5,50,'Hunted: 250 personen totaal'),
-                ('ASSEN','HIGHLAND_GAMES','Highland Games',2,50,'Highland Games: 2 sets totaal'),
-                ('ASSEN','CASINO','Casino',2,50,'Casino: 2 sets totaal'),
-                ('ASSEN','WESTERN_GAMES','Western Games',2,50,'Western Games: 2 sets totaal'),
-                ('ASSEN','HIDDEN_GAMES','Hidden Games',2,50,''),
-                ('HOLLANDSCHEVELD','HIDDEN_GAMES','Hidden Games',1,50,''),
-                ('ASSEN','JONGENS_TEGEN_DE_MEISJES','Jongens tegen de Meisjes',2,50,''),
-                ('HOLLANDSCHEVELD','JONGENS_TEGEN_DE_MEISJES','Jongens tegen de Meisjes',1,50,''),
+                ('ASSEN','HUNTED','Hunted',5,50,'Altijd pakken · 250 personen totaal'),
+                ('ASSEN','CASINO','Casino',2,125,'Altijd pakken · 250 personen totaal · 2 sets'),
+                ('ASSEN','WESTERN_GAMES','Western Games',1,150,'150 personen totaal · 1 set'),
+                ('ASSEN','HIGHLAND_GAMES','Highland Games',2,50,'50 personen per set · 2 sets'),
+                ('ASSEN','VR_GAME','VR Game',1,60,'60 personen totaal · 1 set'),
             ])
             for row in defaults:
                 cur.execute("""INSERT INTO depot_stock(depot_code,resource_code,resource_name,quantity,capacity_per_set,notes)
@@ -185,6 +188,29 @@ def seed_logistics():
                 cur.execute("""INSERT INTO depot_stock(depot_code,resource_code,resource_name,quantity,capacity_per_set,notes)
                     VALUES (%s,'STANDARD_GAME_SET','Extra standaard spelset',%s,50,'Legacy fallback; game-specifieke voorraad heeft voorrang')
                     ON CONFLICT(depot_code,resource_code) DO NOTHING""", (depot, qty))
+
+            # Eenmalige v10.1-correctie van de door JP Activiteiten vastgelegde startvoorraad.
+            # Daarna worden handmatige wijzigingen NIET opnieuw overschreven.
+            cur.execute("SELECT 1 FROM system_migrations WHERE migration_key='v10_1_material_defaults'")
+            if not cur.fetchone():
+                special_defaults = [
+                    ('ASSEN','HUNTED','Hunted',5,50,'Altijd pakken · 250 personen totaal'),
+                    ('ASSEN','CASINO','Casino',2,125,'Altijd pakken · 250 personen totaal · 2 sets'),
+                    ('ASSEN','WESTERN_GAMES','Western Games',1,150,'150 personen totaal · 1 set'),
+                    ('ASSEN','HIGHLAND_GAMES','Highland Games',2,50,'50 personen per set · 2 sets'),
+                    ('ASSEN','VR_GAME','VR Game',1,60,'60 personen totaal · 1 set'),
+                ]
+                for row in special_defaults:
+                    cur.execute("""INSERT INTO depot_stock(depot_code,resource_code,resource_name,quantity,capacity_per_set,notes)
+                        VALUES (%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT(depot_code,resource_code) DO UPDATE SET
+                        resource_name=EXCLUDED.resource_name,quantity=EXCLUDED.quantity,
+                        capacity_per_set=EXCLUDED.capacity_per_set,notes=EXCLUDED.notes""", row)
+
+                # Oude v10.0-specials zijn volgens de nieuwe regels geen materiaalregels meer.
+                cur.execute("DELETE FROM depot_stock WHERE resource_code IN ('HIDDEN_GAMES','JONGENS_TEGEN_DE_MEISJES')")
+                cur.execute("DELETE FROM vehicle_materials WHERE resource_code IN ('HIDDEN_GAMES','JONGENS_TEGEN_DE_MEISJES')")
+                cur.execute("INSERT INTO system_migrations(migration_key) VALUES ('v10_1_material_defaults') ON CONFLICT DO NOTHING")
         conn.commit()
 
 

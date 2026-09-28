@@ -12,13 +12,38 @@
 <body>
 <div class="wrap">
   <div class="hero">
-    <h1>Wagenpark & logistiek <span class="pill" style="background:#fff7d6">v10.0 beheerbaar</span></h1>
+    <h1>Wagenpark & logistiek <span class="pill" style="background:#fff7d6">v10.1 voorraadregels</span></h1>
     <div><a href="/">← Terug naar opdrachten</a> · <a href="/personnel">Personeel</a></div>
-    <p style="margin-bottom:0;color:rgba(255,255,255,.78)">Beheer standplaatsen, voertuigen, standaard materiaal per voertuig en extra voorraad per standplaats. Nieuwe en herberekende planningen gebruiken direct deze instellingen.</p>
+    <p style="margin-bottom:0;color:rgba(255,255,255,.78)">Beheer standplaatsen, voertuigen, standaard materiaal per voertuig en voorraad per standplaats. Iedere wijziging die je opslaat wordt in PostgreSQL onthouden en wordt direct gebruikt bij een nieuwe of herberekende planning.</p>
   </div>
 
   {% if message %}<div class="ok">{{message}}</div>{% endif %}
   {% if error %}<div class="bad">{{error}}</div>{% endif %}
+
+  <div class="card">
+    <h2>Materiaalregels – huidige basis</h2>
+    <div class="grid">
+      <div class="stock-card" style="margin-top:0">
+        <h3 style="margin-top:0">Standaard in iedere bus · tot 50 personen</h3>
+        <p class="muted" style="line-height:1.7;margin-bottom:0">
+          Ik hou van Holland · De Alleskunner · Minute to Win It · Moordspel · Crazy Bingo ·
+          Boogschieten · Pubquiz · Alles mag vandaag · Expeditie Robinson
+        </p>
+      </div>
+      <div class="stock-card" style="margin-top:0">
+        <h3 style="margin-top:0">Speciale voorraad</h3>
+        <p class="muted" style="line-height:1.7;margin-bottom:0">
+          <strong>Hunted:</strong> 250 personen, altijd pakken<br>
+          <strong>Casino:</strong> 250 personen, 2 sets, altijd pakken<br>
+          <strong>Western Games:</strong> 150 personen, 1 set<br>
+          <strong>Highland Games:</strong> 50 personen per set, 2 sets<br>
+          <strong>VR Game:</strong> 60 personen, 1 set<br>
+          Voor overige spellen gelden geen speciale materiaalregels.
+        </p>
+      </div>
+    </div>
+    <p class="muted" style="margin-bottom:0;margin-top:12px"><strong>Personeelsnorm:</strong> 1–30 deelnemers = 1 medewerker · 31–60 = 2 · 61–90 = 3 · daarna steeds +1 medewerker per begonnen groep van 30. Dit blijft per klus handmatig aanpasbaar.</p>
+  </div>
 
   <div class="card">
     <h2>1. Standplaatsen</h2>
@@ -70,7 +95,7 @@
 
   <div class="card">
     <h2>3. Standaard materiaal per voertuig</h2>
-    <p class="muted section-note">Capaciteit is het aantal personen waarvoor dit spel standaard in dát voertuig aanwezig is. Zet Actief uit of capaciteit op 0 als het spel niet standaard in die auto/bus ligt.</p>
+    <p class="muted section-note">Capaciteit is het aantal personen waarvoor dit spel standaard in dát voertuig aanwezig is. Je kunt dit per voertuig aanpassen en opslaan. Zet Actief uit of capaciteit op 0 als het spel niet standaard in die auto/bus ligt; de planner gebruikt daarna direct de opgeslagen waarde.</p>
 
     {% for v in vehicles %}
     <div class="stock-card">
@@ -98,7 +123,7 @@
 
   <div class="card">
     <h2>4. Extra voorraad per standplaats</h2>
-    <p class="muted section-note">Per spel leg je vast hoeveel sets er op de standplaats liggen én hoeveel personen één set aankan. De planner reserveert sets tijdens overlappende diensten.</p>
+    <p class="muted section-note">Per spel leg je vast hoeveel sets er op de standplaats liggen én hoeveel personen één set aankan. Klik op Opslaan na een wijziging; deze voorraad wordt permanent onthouden. De planner gebruikt daarna de nieuwe aantallen en reserveert sets tijdens overlappende diensten.</p>
 
     {% for d in depots %}
     <div class="stock-card">

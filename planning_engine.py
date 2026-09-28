@@ -11,8 +11,6 @@ EMPLOYEE_CAR_PREFIX = 'Extra auto medewerker'
 
 # Match Smart Event Manager activity names to the editable material catalog.
 ACTIVITY_RESOURCE_ALIASES = [
-    ('jongens tegen de meisjes', 'JONGENS_TEGEN_DE_MEISJES'),
-    ('jongens tegen meisjes', 'JONGENS_TEGEN_DE_MEISJES'),
     ('expeditie robinson', 'EXPEDITIE_ROBINSON'),
     ('minute to win it', 'MINUTE_TO_WIN_IT'),
     ('ik hou van holland', 'IK_HOU_VAN_HOLLAND'),
@@ -21,8 +19,6 @@ ACTIVITY_RESOURCE_ALIASES = [
     ('western games', 'WESTERN_GAMES'),
     ('western game', 'WESTERN_GAMES'),
     ('western avond', 'WESTERN_GAMES'),
-    ('hidden games', 'HIDDEN_GAMES'),
-    ('hidden game', 'HIDDEN_GAMES'),
     ('de alleskunner', 'ALLESKUNNER'),
     ('alleskunner', 'ALLESKUNNER'),
     ('crazy bingo', 'CRAZY_BINGO'),
@@ -31,9 +27,15 @@ ACTIVITY_RESOURCE_ALIASES = [
     ('moordspel', 'MOORDSPEL'),
     ('pubquiz', 'PUBQUIZ'),
     ('casino avond', 'CASINO'),
+    ('casino night', 'CASINO'),
     ('casino', 'CASINO'),
+    ('vr game la casa de papel', 'VR_GAME'),
+    ('vr game la casa', 'VR_GAME'),
+    ('vr game', 'VR_GAME'),
+    ('la casa de papel', 'VR_GAME'),
     ('hunted', 'HUNTED'),
 ]
+
 
 
 def _norm(text):
