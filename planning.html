@@ -230,6 +230,66 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 .jpday-block.service-colored.pb-warn{outline:2px solid #f59e0b;outline-offset:-2px}
 .jpday-block.service-colored.pb-bad{outline:2px solid #dc2626;outline-offset:-2px}
 @media(max-width:700px){.jpday-row{grid-template-columns:180px minmax(900px,1fr)!important}}
+
+/* v9.2 - dagplanbord volledig op CSS Grid; geen absolute blokken */
+.jp92-row{
+  display:grid!important;
+  grid-template-columns:230px minmax(900px,1fr)!important;
+  align-items:stretch!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:hidden!important;
+  border-bottom:1px solid #f0ebf4!important;
+}
+.jp92-row:last-child{border-bottom:0!important}
+.jp92-game{
+  padding:14px!important;
+  border-right:1px solid var(--jp-border,#ebe4f2)!important;
+  background:#fbf9fd!important;
+  box-sizing:border-box!important;
+}
+.jp92-game strong{display:block!important;font-size:14px!important;color:var(--jp-purple,#140821)!important}
+.jp92-game span{display:block!important;margin-top:4px!important;font-size:11px!important;color:var(--jp-muted,#4d4658)!important}
+.jp92-track{
+  --jp92-lanes:1;
+  display:grid!important;
+  grid-template-columns:repeat(216,minmax(0,1fr))!important;
+  grid-auto-rows:124px!important;
+  column-gap:0!important;
+  row-gap:12px!important;
+  align-content:start!important;
+  padding:10px 0 14px!important;
+  min-height:148px!important;
+  height:auto!important;
+  max-height:none!important;
+  overflow:hidden!important;
+  box-sizing:border-box!important;
+  background-image:linear-gradient(to right,#eee8f2 1px,transparent 1px)!important;
+  background-size:5.5555556% 100%!important;
+}
+.jp92-block{
+  position:relative!important;
+  left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;
+  width:auto!important;
+  min-width:0!important;
+  height:124px!important;min-height:124px!important;max-height:124px!important;
+  align-self:start!important;
+  z-index:1!important;
+  border-radius:8px!important;
+  padding:7px 9px!important;
+  box-sizing:border-box!important;
+  overflow:hidden!important;
+  border-left:4px solid var(--jp-purple,#140821)!important;
+  font-size:10px!important;line-height:1.25!important;
+  box-shadow:0 4px 12px rgba(36,17,63,.10)!important;
+}
+.jp92-block:hover{z-index:2!important;overflow:hidden!important}
+.jp92-block.service-colored{background:var(--service-soft)!important;border-left-color:var(--service-color)!important}
+.jp92-block.service-colored.pb-warn{outline:2px solid #f59e0b;outline-offset:-2px}
+.jp92-block.service-colored.pb-bad{outline:2px solid #dc2626;outline-offset:-2px}
+@media(max-width:700px){.jp92-row{grid-template-columns:180px minmax(900px,1fr)!important}}
+
 </style>
 </head>
 <body>
@@ -237,7 +297,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 <div class="card">
   <div class="topline">
     <div>
-      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v9.1 · echte lanes per spelrij</span></h1>
+      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v9.2 · CSS-grid tijdvakken zonder overlap</span></h1>
       <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a> · <a href="/personnel">Personeel beheren</a></p>
       <p class="muted">Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen → terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur. Smart Event Manager blijft leidend voor spelstart en speleinde.</p>
     </div>
@@ -428,12 +488,12 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
       </div>
 
       {% for activity_group in date_group.list|groupby('activity') %}
-      <div class="jpday-row">
-        <div class="jpday-game">
+      <div class="jp92-row">
+        <div class="jp92-game">
           <strong>{{activity_group.grouper}}</strong>
           <span>{{activity_group.list|length}} klus{% if activity_group.list|length != 1 %}sen{% endif %}</span>
         </div>
-        <div class="jpday-track">
+        <div class="jp92-track">
           {% for j in activity_group.list %}
             {% set svc = namespace(key='', label='') %}
             {% for rr in plan.vehicle_routes %}{% for sj in rr.jobs %}{% if sj.form_index == j.form_index %}{% set svc.key = rr.date ~ '|' ~ rr.service_number ~ '|' ~ rr.vehicle_code %}{% set svc.label = 'Dienst ' ~ rr.service_number ~ ' · ' ~ rr.vehicle_code ~ ((' · ' ~ (rr.staff_names|join(', '))) if rr.staff_names else '') %}{% endif %}{% endfor %}{% endfor %}
@@ -443,7 +503,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
             {% elif j.warnings or j.staff_warnings %}
               {% set block_class = 'pb-warn' %}
             {% endif %}
-            <div class="jpday-block {{block_class}}"
+            <div class="jp92-block {{block_class}}"
                  data-start="{{j.departure_time or j.arrival_time or j.start}}" data-end="{{j.available_time or j.end}}"
                  data-game-start="{{j.start}}" data-game-end="{{j.end}}"
                  data-service-key="{{svc.key}}" data-service-label="{{svc.label}}"
@@ -548,10 +608,12 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
     if(h) return h + 'u';
     return m + ' min';
   }
-  // v9.1 Dagplanbord: echte lane-containers in de normale documentflow.
-  // Verticaal worden blokken dus niet meer absoluut over spelrijen heen gepositioneerd.
-  document.querySelectorAll('.jpday-track').forEach(track => {
-    const blocks = Array.from(track.querySelectorAll('.jpday-block'));
+  // v9.2 Dagplanbord: echte CSS-grid tijdvakken. Geen absolute positionering meer.
+  // 18 uur van 08:00 tot 02:00 in stappen van 5 minuten = 216 kolommen.
+  const GRID_STEP = 5;
+  const GRID_COLS = Math.ceil(SPAN / GRID_STEP);
+  document.querySelectorAll('.jp92-track').forEach(track => {
+    const blocks = Array.from(track.querySelectorAll('.jp92-block'));
     const items = [];
     const laneEnds = [];
 
@@ -565,8 +627,6 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
       const visibleStart = Math.max(s, START);
       const visibleEnd = Math.min(e, END);
       if(visibleEnd <= START || visibleStart >= END){ block.style.display = 'none'; return; }
-      block.style.left = (((visibleStart - START) / SPAN) * 100) + '%';
-      block.style.width = Math.max(((visibleEnd - visibleStart) / SPAN) * 100, 1.7) + '%';
       items.push({block, start:visibleStart, end:visibleEnd, lane:0});
     });
 
@@ -578,18 +638,12 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
       item.lane = lane;
     });
 
-    const laneCount = Math.max(laneEnds.length, 1);
-    const lanes = [];
-    for(let i=0;i<laneCount;i++){
-      const lane = document.createElement('div');
-      lane.className = 'jpday-lane';
-      lane.dataset.lane = String(i);
-      track.appendChild(lane);
-      lanes.push(lane);
-    }
+    track.style.setProperty('--jp92-lanes', String(Math.max(laneEnds.length,1)));
     items.forEach(item => {
-      item.block.dataset.lane = String(item.lane);
-      lanes[item.lane].appendChild(item.block);
+      const startCol = Math.max(1, Math.floor((item.start - START) / GRID_STEP) + 1);
+      const endCol = Math.min(GRID_COLS + 1, Math.max(startCol + 1, Math.ceil((item.end - START) / GRID_STEP) + 1));
+      item.block.style.gridColumn = `${startCol} / ${endCol}`;
+      item.block.style.gridRow = String(item.lane + 1);
     });
   });
 
@@ -642,12 +696,12 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
     const [strong,soft] = colorFor(key);
     el.style.setProperty('--service-color', strong);
     el.style.setProperty('--service-soft', soft);
-    if(el.classList.contains('jpday-block') || el.classList.contains('wb-event')) el.classList.add('service-colored');
+    if(el.classList.contains('jp92-block') || el.classList.contains('wb-event')) el.classList.add('service-colored');
   });
   const legend = document.getElementById('serviceLegend');
   if(legend){
     const seen = new Set();
-    document.querySelectorAll('.jpday-block[data-service-key]').forEach(el => {
+    document.querySelectorAll('.jp92-block[data-service-key]').forEach(el => {
       const key=el.dataset.serviceKey, label=el.dataset.serviceLabel; if(!key || !label || seen.has(key)) return;
       seen.add(key); const [strong] = colorFor(key);
       const chip=document.createElement('span'); chip.className='service-chip';
