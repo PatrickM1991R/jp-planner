@@ -4,8 +4,123 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dienstenplanning - JP Planner</title>
-
 <style>
+body{font-family:Arial,sans-serif;margin:0;background:#f5f6f8;color:#20242a}
+.wrap{max-width:1500px;margin:28px auto;padding:0 22px}
+.card{background:#fff;border-radius:14px;padding:22px;box-shadow:0 2px 14px rgba(0,0,0,.08);margin-bottom:18px}
+.topline{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex-wrap:wrap}
+.summary{display:flex;gap:34px;flex-wrap:wrap}
+.summary strong{font-size:26px;display:block}
+.small,.muted{color:#667085;font-size:12px}
+.warn{background:#fef3c7;padding:10px;border-radius:8px;margin:6px 0}
+.bad{background:#fee2e2;padding:10px;border-radius:8px}
+.ok{background:#dcfce7;padding:10px;border-radius:8px}
+.pill{display:inline-block;padding:4px 9px;border-radius:999px;background:#eef2ff;font-size:12px;margin-right:5px}
+.service{border:2px solid #e5e7eb}
+.service-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;flex-wrap:wrap;padding-bottom:14px;border-bottom:1px solid #e5e7eb}
+.service-title h2{margin:0 0 5px}
+.service-stats{display:flex;gap:22px;flex-wrap:wrap}
+.service-stats strong{display:block;font-size:20px}
+.job{padding:16px 0;border-bottom:1px solid #eceff3}
+.job:last-child{border-bottom:0}
+.job-grid{display:grid;grid-template-columns:140px 180px minmax(220px,1.3fr) minmax(210px,1fr) 95px minmax(220px,1fr);gap:14px;align-items:start}
+.job h3{margin:0 0 5px;font-size:16px}
+.fieldline{margin:4px 0}
+.fieldline label{display:inline-block;min-width:68px;font-size:12px;color:#667085}
+input[type=time],input[type=number],select{padding:7px;border:1px solid #d0d5dd;border-radius:7px;background:white}
+input[type=time]{width:100px}
+input[type=number]{width:58px}
+select{width:100%;max-width:280px}
+button{padding:11px 17px;border:0;border-radius:8px;background:#1f2937;color:white;cursor:pointer;font-weight:700}
+.buttonbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.route-arrow{font-size:20px;color:#667085;margin-right:6px}
+.game-time-badge{display:inline-block;margin-top:6px;padding:5px 8px;border-radius:7px;background:#eef2ff;color:#3730a3;font-size:12px;font-weight:700}
+.service-game-times{min-width:120px}
+.service-game-times strong{font-size:16px!important;line-height:1.35}
+.unplanned{border:2px solid #fecaca}
+.material{border:2px solid #f59e0b}
+.meta{line-height:1.45}
+.manual-note{background:#eff6ff;border-radius:8px;padding:10px 12px;margin-top:10px}
+.date-head{font-size:13px;color:#667085}
+.service-path{margin:12px 0 0;padding:10px 12px;background:#f8fafc;border-radius:8px;line-height:1.7}
+.service-path span{white-space:nowrap}
+
+@media(max-width:1050px){
+  .job-grid{grid-template-columns:1fr 1fr}
+  .job-grid>div:nth-child(3),
+  .job-grid>div:nth-child(4),
+  .job-grid>div:nth-child(6){grid-column:span 2}
+}
+
+@media(max-width:650px){
+  .job-grid{display:block}
+  .job-grid>div{margin-bottom:12px}
+}
+
+/* Visueel dagplanbord */
+
+.planboard-wrap{overflow-x:auto;padding-bottom:8px}
+.planboard{min-width:1180px}
+.planboard-day{margin-top:22px;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff}
+.planboard-day:first-child{margin-top:0}
+.pb-day-head{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb}
+.pb-day-head h3{margin:0;font-size:20px}
+.pb-day-summary{font-size:12px;color:#667085}
+.pb-header,.jpday-row{display:grid;grid-template-columns:230px minmax(900px,1fr)}
+.pb-header{background:#fff;border-bottom:1px solid #e5e7eb;position:sticky;top:0;z-index:4}
+.pb-label-head{padding:10px 14px;font-weight:700;color:#475467;border-right:1px solid #e5e7eb}
+.pb-hours{position:relative;height:42px;background-image:linear-gradient(to right,#e5e7eb 1px,transparent 1px);background-size:5.5555556% 100%}
+.pb-hour{position:absolute;top:9px;transform:translateX(-50%);font-size:11px;color:#667085;white-space:nowrap}
+.jpday-row{--lane-count:1;height:calc(24px + (var(--lane-count) * 136px))!important;min-height:calc(24px + (var(--lane-count) * 136px))!important;border-bottom:1px solid #eef2f6;align-items:stretch;overflow:hidden}
+.jpday-row:last-child{border-bottom:0}
+.jpday-game{padding:14px;border-right:1px solid #e5e7eb;background:#fbfcfd}
+.jpday-game strong{display:block;font-size:14px}
+.jpday-game span{display:block;margin-top:4px;font-size:11px;color:#667085}
+.jpday-track{--lane-count:1;position:relative;height:calc(24px + (var(--lane-count) * 136px))!important;min-height:calc(24px + (var(--lane-count) * 136px))!important;overflow:hidden;background-image:linear-gradient(to right,#eef2f6 1px,transparent 1px);background-size:5.5555556% 100%;transition:min-height .15s ease}
+.jpday-block{position:absolute;top:10px;min-width:58px;height:124px!important;max-height:124px!important;border-radius:8px;padding:7px 9px;box-sizing:border-box;overflow:hidden;border-left:4px solid rgba(0,0,0,.22);font-size:10px;line-height:1.25;box-shadow:0 1px 3px rgba(0,0,0,.12);cursor:default}
+.jpday-block:hover{z-index:10;min-height:60px;overflow:visible;box-shadow:0 5px 18px rgba(0,0,0,.20)}
+.pb-ok{background:#bbf7d0}
+.pb-warn{background:#fde68a}
+.pb-bad{background:#fecaca}
+.pb-neutral{background:#e5e7eb}
+.pb-time{font-weight:800;font-size:11px}
+.pb-main{font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pb-meta{margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pb-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:#667085}
+.pb-dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.pb-section-title{margin:0 0 5px;font-size:26px}
+.planboard-card-title{border-top:4px solid #1f2937}
+.pb-section-note{margin:0;color:#667085;font-size:12px}
+
+@media(max-width:700px){
+  .pb-header,.jpday-row{grid-template-columns:180px minmax(900px,1fr)}
+}
+
+/* Dag / week */
+
+.view-switch{display:flex;gap:8px;margin-top:14px}
+.view-switch button{background:#eef2f6;color:#344054;border:1px solid #d0d5dd}
+.view-switch button.active{background:#1f2937;color:#fff;border-color:#1f2937}
+.planning-view{display:none}
+.planning-view.active{display:block}
+.weekboard-wrap{overflow-x:auto}
+.weekboard{min-width:1180px;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff}
+.wb-head{display:grid;grid-template-columns:84px repeat(var(--days),minmax(150px,1fr));background:#f8fafc;border-bottom:1px solid #e5e7eb}
+.wb-head>div{padding:10px 8px;border-right:1px solid #e5e7eb;text-align:center;font-weight:700}
+.wb-head>div:first-child{text-align:left}
+.wb-body{display:grid;grid-template-columns:84px repeat(var(--days),minmax(150px,1fr));height:900px;position:relative}
+.wb-times{position:relative;border-right:1px solid #e5e7eb;background:#fbfcfd}
+.wb-time{position:absolute;right:9px;transform:translateY(-50%);font-size:11px;color:#667085}
+.wb-day{position:relative;border-right:1px solid #e5e7eb;background-image:linear-gradient(to bottom,#eef2f6 1px,transparent 1px);background-size:100% 5.5555556%}
+.wb-event{position:absolute;left:5px;right:5px;border-radius:8px;padding:6px 7px;box-sizing:border-box;border-left:4px solid rgba(0,0,0,.22);font-size:10px;line-height:1.2;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.10)}
+.wb-event:hover{z-index:20;overflow:visible;height:auto!important;min-height:42px;box-shadow:0 5px 18px rgba(0,0,0,.20)}
+.wb-event .wb-title{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wb-event .wb-meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.wb-note{margin-top:10px;color:#667085;font-size:12px}
+.view-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+
+/* JP huisstijl */
+
 :root{
   --jp-purple:#140821;
   --jp-gold:#c9a227;
@@ -16,144 +131,164 @@
   --jp-border:#ebe4f2;
   --jp-white:#ffffff;
   --jp-shadow:0 18px 45px rgba(36,17,63,.08);
+  --jp-shadow-strong:0 22px 55px rgba(36,17,63,.12);
 }
 
-*{box-sizing:border-box}
-
-body{
-  font-family:Arial,sans-serif;
-  margin:0;
-  background:var(--jp-light);
-  color:var(--jp-text);
-}
-
-.wrap{
-  max-width:1500px;
-  margin:28px auto;
-  padding:0 24px;
-}
+body{background:var(--jp-light);color:var(--jp-text)}
+.wrap{max-width:1500px;padding:0 24px}
 
 .card{
-  background:#fff;
+  background:var(--jp-white);
   border:1px solid var(--jp-border);
   border-radius:28px;
-  padding:24px;
   box-shadow:var(--jp-shadow);
-  margin-bottom:18px;
+  padding:24px;
 }
 
 .wrap>.card:first-child{
-  background:linear-gradient(112deg,#140821,#24113f);
-  color:#fff;
+  background:linear-gradient(112deg,rgba(20,8,33,.99),rgba(20,8,33,.92));
   border:0;
+  color:#fff;
+  box-shadow:var(--jp-shadow-strong);
 }
 
 .wrap>.card:first-child h1{color:#fff}
+.wrap>.card:first-child .muted{color:rgba(255,255,255,.74)}
+.wrap>.card:first-child a{color:var(--jp-gold);font-weight:800;text-decoration:none}
+.wrap>.card:first-child a:hover{color:#fff}
 
-.wrap>.card:first-child a{
-  color:var(--jp-gold);
-  font-weight:800;
-  text-decoration:none;
-}
+h1,h2,h3{letter-spacing:-.025em}
+h1{font-weight:900}
+h2{color:var(--jp-purple);font-weight:900}
+h3{color:var(--jp-purple)}
 
-h1,h2,h3{
-  letter-spacing:-.025em;
-}
-
-h1,h2{
-  font-weight:900;
-}
-
-h2,h3{
-  color:var(--jp-purple);
-}
-
-.small,.muted{
-  color:var(--jp-muted);
-  font-size:12px;
-}
-
-.topline{
-  display:flex;
-  justify-content:space-between;
-  gap:18px;
-  align-items:flex-start;
-  flex-wrap:wrap;
-}
-
-.summary{
-  display:flex;
-  gap:34px;
-  flex-wrap:wrap;
-}
-
-.summary strong{
-  display:block;
-  font-size:26px;
-  color:var(--jp-purple);
-}
+.summary strong,.service-stats strong{color:var(--jp-purple);font-weight:900}
+.small,.muted,.date-head,.pb-day-summary,.pb-section-note,.wb-note{color:var(--jp-muted)}
 
 button{
-  padding:11px 17px;
-  border:0;
-  border-radius:999px;
   background:var(--jp-gold);
   color:#fff;
-  cursor:pointer;
+  border-radius:999px;
   font-weight:900;
+  box-shadow:0 10px 22px rgba(0,0,0,.10);
+  transition:.2s ease;
 }
 
-button:hover{
-  background:var(--jp-gold-dark);
-}
+button:hover{background:var(--jp-gold-dark);transform:translateY(-1px)}
 
-.buttonbar{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  flex-wrap:wrap;
-}
-
-input[type=time],
-input[type=number],
-select{
-  padding:7px;
+input[type=time],input[type=number],select{
   border:1px solid #d9d0e3;
   border-radius:10px;
   background:#fff;
+  color:var(--jp-text);
 }
 
-input[type=time]{width:100px}
-input[type=number]{width:58px}
-select{width:100%;max-width:280px}
-
-.warn{
-  background:#fff8df;
-  color:#6f5311;
-  border:1px solid #f1dea0;
-  padding:10px;
-  border-radius:8px;
-  margin:6px 0;
+input[type=time]:focus,
+input[type=number]:focus,
+select:focus{
+  outline:none;
+  border-color:var(--jp-gold);
+  box-shadow:0 0 0 3px rgba(201,162,39,.14);
 }
 
-.bad{
-  background:#fff0f0;
-  color:#8b1d1d;
-  padding:10px;
-  border-radius:8px;
+.service{border:1px solid var(--jp-border);box-shadow:var(--jp-shadow)}
+.service-head{border-bottom:1px solid var(--jp-border)}
+.service-title h2{color:var(--jp-purple)}
+.job{border-bottom:1px solid #f0ebf4}
+.manual-note{background:#f5f0fa;border:1px solid #ebe4f2;color:var(--jp-purple)}
+
+.service-path{
+  background:linear-gradient(90deg,#f7f4fb,#fffaf0);
+  border:1px solid var(--jp-border);
+  color:var(--jp-text);
 }
 
-.ok{
-  background:#edf9f1;
-  color:#166534;
-  padding:10px;
-  border-radius:8px;
+.route-arrow{color:var(--jp-gold)}
+
+.game-time-badge{
+  background:rgba(201,162,39,.13);
+  color:var(--jp-purple);
+  border:1px solid rgba(201,162,39,.24);
+  font-weight:900;
 }
+
+.pill{background:#f3eef8;color:var(--jp-purple)}
+.ok{background:#edf9f1;color:#166534;border:1px solid #ccebd6}
+.warn{background:#fff8df;color:#6f5311;border:1px solid #f1dea0}
+.bad{background:#fff0f0;color:#8b1d1d;border:1px solid #f2c7c7}
+.unplanned{border:2px solid #e7b9b9}
+.material{border:2px solid var(--jp-gold)}
+
+.planboard-card-title{
+  border-top:0;
+  background:linear-gradient(112deg,var(--jp-purple),#24113f);
+  color:#fff;
+}
+
+.planboard-card-title h2{color:#fff}
+.planboard-card-title .pb-section-note{color:rgba(255,255,255,.75)}
+.planboard-card-title .pb-legend{color:rgba(255,255,255,.84)}
+
+.planboard-day,.weekboard{
+  border:1px solid var(--jp-border);
+  border-radius:22px;
+  box-shadow:0 10px 30px rgba(36,17,63,.05);
+}
+
+.pb-day-head,.wb-head{
+  background:var(--jp-purple);
+  color:#fff;
+  border-bottom:1px solid rgba(255,255,255,.12);
+}
+
+.pb-day-head h3{color:#fff}
+.pb-day-summary{color:rgba(255,255,255,.72)}
+.pb-header{background:#fbf9fd;border-bottom:1px solid var(--jp-border)}
+.pb-label-head{color:var(--jp-purple);border-right:1px solid var(--jp-border)}
+.pb-hours{background-image:linear-gradient(to right,#e7dfed 1px,transparent 1px)}
+.pb-hour,.wb-time{color:var(--jp-muted)}
+.jpday-row{border-bottom:1px solid #f0ebf4}
+.jpday-game{background:#fbf9fd;border-right:1px solid var(--jp-border)}
+.jpday-game strong{color:var(--jp-purple)}
+.jpday-game span{color:var(--jp-muted)}
+.jpday-track,.wb-day{background-image:linear-gradient(to right,#eee8f2 1px,transparent 1px)}
+.jpday-block,.wb-event{border-left-color:var(--jp-purple);box-shadow:0 4px 12px rgba(36,17,63,.10)}
+.pb-ok{background:#dcf7e7}
+.pb-warn{background:#fff0b8}
+.pb-bad{background:#ffd9d9}
+.pb-neutral{background:#eee9f2}
+.pb-main,.pb-time,.wb-title{color:var(--jp-purple)}
+
+.view-switch button{
+  background:#fff;
+  color:var(--jp-purple);
+  border:1px solid var(--jp-border);
+  box-shadow:none;
+}
+
+.view-switch button:hover{background:#f5f0fa;color:var(--jp-purple)}
+
+.view-switch button.active{
+  background:var(--jp-gold);
+  color:#fff;
+  border-color:var(--jp-gold);
+}
+
+.weekboard{background:#fff}
+.wb-head>div{border-right:1px solid rgba(255,255,255,.12)}
+.wb-times{background:#fbf9fd;border-right:1px solid var(--jp-border)}
+.wb-day{border-right:1px solid var(--jp-border);background-image:linear-gradient(to bottom,#eee8f2 1px,transparent 1px)}
+
+@media(max-width:700px){
+  .card{border-radius:20px;padding:18px}
+  .wrap{padding:0 12px}
+}
+
+/* Dienstkleuren */
 
 .service{
   position:relative;
   overflow:hidden;
-  border:1px solid var(--jp-border);
 }
 
 .service::before{
@@ -163,167 +298,35 @@ select{width:100%;max-width:280px}
   top:0;
   bottom:0;
   width:7px;
-  background:var(--service-color,var(--jp-gold));
+  background:var(--service-color,#c9a227);
 }
 
-.service-head{
-  display:flex;
-  justify-content:space-between;
-  gap:20px;
-  align-items:flex-start;
-  flex-wrap:wrap;
-  padding-bottom:14px;
-  border-bottom:1px solid var(--jp-border);
+.jp92-block.service-colored,
+.wb-event.service-colored{
+  background:var(--service-soft)!important;
+  border-left-color:var(--service-color)!important;
 }
 
-.service-title h2{
-  margin:0 0 5px;
+.jp92-block.service-colored.pb-warn,
+.wb-event.service-colored.pb-warn{
+  outline:2px solid #f59e0b;
+  outline-offset:-2px;
 }
 
-.service-stats{
-  display:flex;
-  gap:22px;
-  flex-wrap:wrap;
+.jp92-block.service-colored.pb-bad,
+.wb-event.service-colored.pb-bad{
+  outline:2px solid #dc2626;
+  outline-offset:-2px;
 }
 
-.service-stats strong{
-  display:block;
-  font-size:20px;
-  color:var(--jp-purple);
-}
-
-.service-path{
-  margin:12px 0 0;
-  padding:10px 12px;
-  background:linear-gradient(90deg,#f7f4fb,#fffaf0);
-  border:1px solid var(--jp-border);
-  border-radius:8px;
-  line-height:1.7;
-}
-
-.service-path span{
-  white-space:nowrap;
-}
-
-.job{
-  padding:16px 0;
-  border-bottom:1px solid #f0ebf4;
-}
-
-.job:last-child{border-bottom:0}
-
-.job-grid{
-  display:grid;
-  grid-template-columns:
-    140px
-    180px
-    minmax(220px,1.3fr)
-    minmax(210px,1fr)
-    95px
-    minmax(220px,1fr);
-  gap:14px;
-  align-items:start;
-}
-
-.job h3{
-  margin:0 0 5px;
-  font-size:16px;
-}
-
-.fieldline{
-  margin:4px 0;
-}
-
-.fieldline label{
-  display:inline-block;
-  min-width:68px;
-  font-size:12px;
-  color:#667085;
-}
-
-.game-time-badge{
-  display:inline-block;
-  margin-top:6px;
-  padding:5px 8px;
-  border-radius:7px;
-  background:rgba(201,162,39,.13);
-  color:var(--jp-purple);
-  font-size:12px;
+.pb-service{
   font-weight:900;
-}
-
-.manual-note{
-  background:#f5f0fa;
-  border:1px solid var(--jp-border);
-  border-radius:8px;
-  padding:10px 12px;
-  margin-top:10px;
-}
-
-.extra-transport-person{
-  margin-top:8px;
-  padding:9px 10px;
-  border-radius:10px;
-  background:#f7f4fb;
-  border:1px solid var(--jp-border);
-}
-
-.extra-transport-person label{
-  display:block;
-  font-size:11px;
-  font-weight:800;
-  color:var(--jp-purple);
-  margin-bottom:4px;
-}
-
-.transport-help{
-  font-size:11px;
-  color:#6b6472;
-  margin-top:5px;
-  line-height:1.35;
-}
-
-/* ============================================================
-   PLANBORD v9.2
-   Elke activiteit heeft een EIGEN CSS-gridrij.
-   Blokken zijn NIET absoluut gepositioneerd.
-   ============================================================ */
-
-.planboard-card-title{
-  background:linear-gradient(112deg,var(--jp-purple),#24113f);
-  color:#fff;
-}
-
-.planboard-card-title h2{
-  color:#fff;
-}
-
-.pb-section-title{
-  margin:0 0 5px;
-  font-size:26px;
-}
-
-.pb-section-note{
-  margin:0;
-  color:rgba(255,255,255,.75);
-  font-size:12px;
-}
-
-.pb-legend{
-  display:flex;
-  gap:14px;
-  flex-wrap:wrap;
-  margin-top:10px;
-  font-size:12px;
-  color:rgba(255,255,255,.84);
-}
-
-.pb-dot{
-  display:inline-block;
-  width:10px;
-  height:10px;
-  border-radius:3px;
-  margin-right:5px;
+  font-size:10px;
+  color:#140821;
+  margin-bottom:3px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
 .service-legend{
@@ -340,10 +343,10 @@ select{width:100%;max-width:280px}
   padding:6px 10px;
   border-radius:999px;
   background:#fff;
-  border:1px solid var(--jp-border);
+  border:1px solid #ebe4f2;
   font-size:11px;
   font-weight:800;
-  color:var(--jp-purple);
+  color:#140821;
 }
 
 .service-chip i{
@@ -353,339 +356,116 @@ select{width:100%;max-width:280px}
   display:inline-block;
 }
 
-.view-switch{
-  display:flex;
-  gap:8px;
-  margin-top:14px;
+.extra-transport-person{
+  margin-top:8px;
+  padding:9px 10px;
+  border-radius:10px;
+  background:#f7f4fb;
+  border:1px solid #ebe4f2;
 }
 
-.view-switch button{
-  background:#fff;
-  color:var(--jp-purple);
-  border:1px solid var(--jp-border);
-}
-
-.view-switch button.active{
-  background:var(--jp-gold);
-  color:#fff;
-}
-
-.planning-view{
-  display:none;
-}
-
-.planning-view.active{
+.extra-transport-person label{
   display:block;
-}
-
-.planboard-wrap{
-  overflow-x:auto;
-  padding-bottom:8px;
-}
-
-.planboard{
-  min-width:1180px;
-}
-
-.planboard-day{
-  margin-top:22px;
-  border:1px solid var(--jp-border);
-  border-radius:22px;
-  overflow:hidden;
-  background:#fff;
-}
-
-.planboard-day:first-child{
-  margin-top:0;
-}
-
-.jp92-day-head{
-  display:flex;
-  justify-content:space-between;
-  gap:16px;
-  align-items:center;
-  padding:14px 16px;
-  background:var(--jp-purple);
-  color:#fff;
-}
-
-.jp92-day-head h3{
-  margin:0;
-  color:#fff;
-  font-size:20px;
-}
-
-.jp92-header{
-  display:grid;
-  grid-template-columns:230px minmax(900px,1fr);
-  background:#fbf9fd;
-  border-bottom:1px solid var(--jp-border);
-}
-
-.jp92-label-head{
-  padding:10px 14px;
-  font-weight:700;
-  color:var(--jp-purple);
-  border-right:1px solid var(--jp-border);
-}
-
-.jp92-hours{
-  position:relative;
-  height:42px;
-  background-image:
-    linear-gradient(to right,#e7dfed 1px,transparent 1px);
-  background-size:5.5555556% 100%;
-}
-
-.jp92-hour{
-  position:absolute;
-  top:9px;
-  transform:translateX(-50%);
   font-size:11px;
-  color:var(--jp-muted);
-  white-space:nowrap;
+  font-weight:800;
+  color:#140821;
+  margin-bottom:4px;
 }
 
-/* BELANGRIJK:
-   iedere activiteit is een normale rij in de documentflow */
+.transport-help{
+  font-size:11px;
+  color:#6b6472;
+  margin-top:5px;
+  line-height:1.35;
+}
+
+/* v9.2 CSS-grid diensttijdsbalk */
+
 .jp92-row{
   display:grid!important;
   grid-template-columns:230px minmax(900px,1fr)!important;
   align-items:stretch!important;
-
   height:auto!important;
   min-height:0!important;
   max-height:none!important;
-
   overflow:hidden!important;
   border-bottom:1px solid #f0ebf4!important;
 }
 
-.jp92-row:last-child{
-  border-bottom:0!important;
-}
+.jp92-row:last-child{border-bottom:0!important}
 
 .jp92-game{
-  padding:14px;
-  border-right:1px solid var(--jp-border);
-  background:#fbf9fd;
-  min-height:148px;
+  padding:14px!important;
+  border-right:1px solid var(--jp-border,#ebe4f2)!important;
+  background:#fbf9fd!important;
+  box-sizing:border-box!important;
 }
 
 .jp92-game strong{
-  display:block;
-  font-size:14px;
-  color:var(--jp-purple);
+  display:block!important;
+  font-size:14px!important;
+  color:var(--jp-purple,#140821)!important;
 }
 
 .jp92-game span{
-  display:block;
-  margin-top:4px;
-  font-size:11px;
-  color:var(--jp-muted);
+  display:block!important;
+  margin-top:4px!important;
+  font-size:11px!important;
+  color:var(--jp-muted,#4d4658)!important;
 }
 
-/* Tijdsbalk = CSS grid van 216 vakken van 5 minuten.
-   08:00 -> 02:00 = 18 uur = 1080 min / 5 = 216 */
 .jp92-track{
+  --jp92-lanes:1;
   display:grid!important;
   grid-template-columns:repeat(216,minmax(0,1fr))!important;
-
   grid-auto-rows:124px!important;
   column-gap:0!important;
   row-gap:12px!important;
-
   align-content:start!important;
-
   padding:10px 0 14px!important;
-
   min-height:148px!important;
   height:auto!important;
   max-height:none!important;
-
   overflow:hidden!important;
-
-  background-image:
-    linear-gradient(to right,#eee8f2 1px,transparent 1px)!important;
+  box-sizing:border-box!important;
+  background-image:linear-gradient(to right,#eee8f2 1px,transparent 1px)!important;
   background-size:5.5555556% 100%!important;
 }
 
-/* GEEN position:absolute meer */
 .jp92-block{
   position:relative!important;
-
   left:auto!important;
   right:auto!important;
   top:auto!important;
   bottom:auto!important;
-
   width:auto!important;
   min-width:0!important;
-
   height:124px!important;
   min-height:124px!important;
   max-height:124px!important;
-
   align-self:start!important;
-
   z-index:1!important;
-
-  border-radius:10px;
-  padding:7px 9px;
-  overflow:hidden;
-
-  border-left:5px solid var(--service-color,var(--jp-purple));
-
-  font-size:10px;
-  line-height:1.25;
-
-  box-shadow:0 4px 12px rgba(36,17,63,.10);
-
-  background:var(--service-soft,#eee9f2);
+  border-radius:8px!important;
+  padding:7px 9px!important;
+  box-sizing:border-box!important;
+  overflow:hidden!important;
+  border-left:4px solid var(--jp-purple,#140821)!important;
+  font-size:10px!important;
+  line-height:1.25!important;
+  box-shadow:0 4px 12px rgba(36,17,63,.10)!important;
 }
 
 .jp92-block:hover{
-  z-index:5!important;
-  box-shadow:0 7px 18px rgba(36,17,63,.18);
-}
-
-.jp92-block.pb-warn{
-  outline:2px solid #f59e0b;
-  outline-offset:-2px;
-}
-
-.jp92-block.pb-bad{
-  outline:2px solid #dc2626;
-  outline-offset:-2px;
-}
-
-.pb-service{
-  font-weight:900;
-  font-size:10px;
-  color:#140821;
-  margin-bottom:3px;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-.pb-time{
-  font-weight:800;
-  font-size:11px;
-  color:var(--jp-purple);
-}
-
-.pb-main{
-  font-weight:800;
-  margin-top:3px;
-  color:var(--jp-purple);
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-.pb-meta{
-  margin-top:3px;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-/* WEEKPLANNING */
-
-.weekboard-wrap{
-  overflow-x:auto;
-}
-
-.weekboard{
-  min-width:1180px;
-  border:1px solid var(--jp-border);
-  border-radius:22px;
-  overflow:hidden;
-  background:#fff;
-}
-
-.wb-head{
-  display:grid;
-  grid-template-columns:84px repeat(var(--days),minmax(150px,1fr));
-  background:var(--jp-purple);
-  color:#fff;
-}
-
-.wb-head>div{
-  padding:10px 8px;
-  border-right:1px solid rgba(255,255,255,.12);
-  text-align:center;
-  font-weight:700;
-}
-
-.wb-body{
-  display:grid;
-  grid-template-columns:84px repeat(var(--days),minmax(150px,1fr));
-  height:900px;
-}
-
-.wb-times{
-  position:relative;
-  border-right:1px solid var(--jp-border);
-  background:#fbf9fd;
-}
-
-.wb-time{
-  position:absolute;
-  right:9px;
-  transform:translateY(-50%);
-  font-size:11px;
-  color:var(--jp-muted);
-}
-
-.wb-day{
-  position:relative;
-  border-right:1px solid var(--jp-border);
-  background-image:
-    linear-gradient(to bottom,#eee8f2 1px,transparent 1px);
-  background-size:100% 5.5555556%;
-}
-
-.wb-event{
-  position:absolute;
-  left:5px;
-  right:5px;
-  border-radius:8px;
-  padding:6px 7px;
-  overflow:hidden;
-  border-left:4px solid var(--service-color,var(--jp-purple));
-  background:var(--service-soft,#eee9f2);
-  font-size:10px;
-  line-height:1.2;
-}
-
-.wb-title{
-  font-weight:800;
-}
-
-.wb-meta{
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  margin-top:2px;
-}
-
-@media(max-width:1050px){
-  .job-grid{
-    grid-template-columns:1fr 1fr;
-  }
+  z-index:2!important;
+  overflow:hidden!important;
 }
 
 @media(max-width:700px){
-  .wrap{padding:0 12px}
-  .card{padding:18px;border-radius:20px}
-
-  .jp92-header,
   .jp92-row{
     grid-template-columns:180px minmax(900px,1fr)!important;
   }
 }
+
 </style>
 </head>
 
@@ -699,7 +479,7 @@ select{width:100%;max-width:280px}
       <h1>
         Dienstenplanning & routes
         <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">
-          Planbord v9.2 · CSS-grid tijdvakken zonder overlap
+          Planbord v9.5 · diensten + pauzetijd
         </span>
       </h1>
 
@@ -709,9 +489,10 @@ select{width:100%;max-width:280px}
         <a href="/personnel">Personeel beheren</a>
       </p>
 
-      <p class="muted" style="color:rgba(255,255,255,.74)">
-        Iedere kaart hieronder is één dienst: standplaats → gekoppelde
-        klussen → terug naar standplaats.
+      <p class="muted">
+        Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen →
+        terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur.
+        Smart Event Manager blijft leidend voor spelstart en speleinde.
       </p>
     </div>
   </div>
@@ -754,9 +535,8 @@ select{width:100%;max-width:280px}
 {% if plan.warnings %}
 <div class="card">
   <h2>Waarschuwingen</h2>
-
   {% for w in plan.warnings %}
-  <div class="warn">{{w}}</div>
+    <div class="warn">{{w}}</div>
   {% endfor %}
 </div>
 {% endif %}
@@ -767,20 +547,17 @@ select{width:100%;max-width:280px}
 
 <div class="card">
   <div class="topline">
-
     <div>
       <h2 style="margin:0 0 5px">Planning handmatig aanpassen</h2>
-
       <div class="muted">
-        Wijzig per klus de bus, vervoer, start/eindtijd,
-        opbouw of opruimtijd.
+        Wijzig per klus de bus, eigen vervoer, start/eindtijd, opbouw of opruimtijd.
+        Klik daarna op Herberekenen; JP Planner bouwt alle diensten en routes opnieuw op.
       </div>
     </div>
 
     <div class="buttonbar">
       <button type="submit">Herbereken volledige planning</button>
     </div>
-
   </div>
 </div>
 
@@ -789,287 +566,358 @@ select{width:100%;max-width:280px}
 <div
   class="card service"
   data-service-key="{{r.date}}|{{r.service_number}}|{{r.vehicle_code}}"
+  data-service-label="Dienst {{r.service_number}} · {{r.vehicle_code}}{% if r.staff_names %} · {{r.staff_names|join(', ')}}{% endif %}"
 >
 
-<div class="service-head">
+  <div class="service-head">
 
-  <div class="service-title">
-    <div class="small">{{r.date}}</div>
+    <div class="service-title">
 
-    <h2>
-      Dienst {{r.service_number}} — {{r.vehicle_code}}
-      {% if r.own_transport %} · eigen vervoer{% endif %}
-    </h2>
+      <div class="date-head">{{r.date}}</div>
 
-    <div>
-      <strong>{{r.depot_name}}</strong> — {{r.depot_address}}
+      <h2>
+        Dienst {{r.service_number}} — {{r.vehicle_code}}
+        {% if r.own_transport %} · eigen vervoer{% endif %}
+      </h2>
+
+      <div class="meta">
+        <strong>{{r.depot_name}}</strong> — {{r.depot_address}}
+      </div>
+
+      {% if r.staff_names %}
+      <div class="meta">
+        <strong>Personeel dienst:</strong>
+        {{r.staff_names|join(", ")}}
+      </div>
+      {% endif %}
+
+      {% if r.staff_duty %}
+      <div class="meta" style="margin-top:6px">
+
+        {% for sd in r.staff_duty %}
+
+        <div>
+          <strong>{{sd.name}}:</strong>
+          {{sd.base_duration}} dienst
+
+          {% if sd.pause_minutes %}
+            + {{sd.pause_duration}} pauze =
+            <strong>{{sd.duration}}</strong>
+          {% else %}
+            · geen standaardpauze
+          {% endif %}
+        </div>
+
+        {% endfor %}
+
+      </div>
+      {% endif %}
+
     </div>
 
-    {% if r.staff_names %}
-    <div>
-      <strong>Personeel dienst:</strong>
-      {{r.staff_names|join(", ")}}
+    <div class="service-stats">
+
+      <div>
+        <span class="small">Dienst</span>
+        <strong>{{r.first_departure}}–{{r.return_time}}</strong>
+        <span class="small">{{r.duty_duration}}</span>
+      </div>
+
+      <div class="service-game-times">
+        <span class="small">
+          Speltijd{% if r.jobs|length != 1 %}en{% endif %}
+        </span>
+
+        <strong>
+          {% for sj in r.jobs %}
+            {{sj.start}}–{{sj.end}}
+            {% if not loop.last %}<br>{% endif %}
+          {% endfor %}
+        </strong>
+      </div>
+
+      <div>
+        <span class="small">Klussen</span>
+        <strong>{{r.jobs|length}}</strong>
+      </div>
+
+      <div>
+        <span class="small">Afstand</span>
+        <strong>{{r.distance_km}} km</strong>
+      </div>
+
+      <div>
+        <span class="small">Rijtijd</span>
+        <strong>{{r.drive_minutes}} min</strong>
+      </div>
+
     </div>
-    {% endif %}
   </div>
 
-  <div class="service-stats">
+  <div class="service-path">
 
-    <div>
-      <span class="small">Dienst</span>
-      <strong>{{r.first_departure}}–{{r.return_time}}</strong>
-      <span class="small">{{r.duty_duration}}</span>
-    </div>
+    <span>🏠 {{r.depot_name}}</span>
 
-    <div>
-      <span class="small">Klussen</span>
-      <strong>{{r.jobs|length}}</strong>
-    </div>
+    {% for j in r.jobs %}
 
-    <div>
-      <span class="small">Afstand</span>
-      <strong>{{r.distance_km}} km</strong>
-    </div>
-
-    <div>
-      <span class="small">Rijtijd</span>
-      <strong>{{r.drive_minutes}} min</strong>
-    </div>
-
-  </div>
-</div>
-
-<div class="service-path">
-
-  <span>🏠 {{r.depot_name}}</span>
-
-  {% for j in r.jobs %}
     <span>
       → <strong>{{j.start}} {{j.activity}}</strong>
       ({{j.location_text}})
     </span>
-  {% endfor %}
 
-  <span>→ 🏠 {{r.depot_name}}</span>
-
-</div>
-
-{% for j in r.jobs %}
-
-{% set i=j.form_index %}
-
-<div class="job">
-
-<div class="job-grid">
-
-<div>
-  <div class="small">Tijd</div>
-
-  <h3>{{j.arrival_time}} aanwezig</h3>
-
-  <div class="game-time-badge">
-    Spel: {{j.start}}–{{j.end}}
-  </div>
-
-  <div class="fieldline">
-    <label>Start spel</label>
-    <input
-      type="time"
-      name="start_{{i}}"
-      value="{{j.start}}">
-  </div>
-
-  <div class="fieldline">
-    <label>Einde spel</label>
-    <input
-      type="time"
-      name="end_{{i}}"
-      value="{{j.end}}">
-  </div>
-</div>
-
-<div>
-  <div class="small">Werkblok</div>
-
-  <div class="fieldline">
-    <label>Opbouw</label>
-    <input
-      type="number"
-      min="0"
-      name="setup_{{i}}"
-      value="{{j.setup_minutes}}">
-    min
-  </div>
-
-  <div>
-    <strong>{{j.start}}–{{j.end}}</strong> spel
-  </div>
-
-  <div class="fieldline">
-    <label>Opruimen</label>
-    <input
-      type="number"
-      min="0"
-      name="cleanup_{{i}}"
-      value="{{j.cleanup_minutes}}">
-    min
-  </div>
-
-  <div>
-    <strong>{{j.available_time}}</strong> beschikbaar
-  </div>
-</div>
-
-<div>
-  <div class="small">Klus</div>
-  <h3>{{j.activity}}</h3>
-  <div>{{j.location_text}}</div>
-  <div class="small">Ref. {{j.reference}}</div>
-</div>
-
-<div>
-  <div class="small">Bus / vervoer handmatig</div>
-
-  <select name="override_{{i}}">
-    <option value="">Automatisch</option>
-
-    {% for v in plan.vehicles %}
-    <option
-      value="{{v.code}}"
-      {% if j.vehicle_code==v.code %}selected{% endif %}>
-      {{v.code}}
-    </option>
     {% endfor %}
-  </select>
 
-  <div
-    class="extra-transport-person"
-    data-extra-employee-wrap="{{i}}">
+    <span>→ 🏠 {{r.depot_name}}</span>
 
-    <label>
-      Welke medewerker stelt de extra auto beschikbaar?
-    </label>
-
-    <select
-      name="extra_car_employee_{{i}}"
-      data-extra-employee="{{i}}">
-
-      <option value="">Kies medewerker</option>
-
-      {% for e in plan.employees %}
-      <option
-        value="{{e.name}}"
-        {% if j.transport_employee==e.name %}selected{% endif %}>
-        {{e.name}}
-      </option>
-      {% endfor %}
-
-    </select>
-
-    <div class="transport-help">
-      Alleen nodig bij Extra auto medewerker.
-    </div>
   </div>
 
-  <div class="manual-note small">
-    Je kunt ook een <strong>Extra huurauto</strong> of
-    <strong>Extra auto medewerker</strong> kiezen.
-  </div>
-</div>
+  {% for j in r.jobs %}
 
-<div>
-  <div class="small">Bezetting</div>
+  {% set i=j.form_index %}
 
-  <h3>{{j.participants}} pers.</h3>
+  <div class="job">
 
-  <div class="fieldline">
-    <label>Aantal</label>
+    <div class="job-grid">
 
-    <input
-      type="number"
-      min="1"
-      name="staff_{{i}}"
-      value="{{j.staff_required}}">
-  </div>
+      <div>
+        <div class="small">Tijd</div>
 
-  {% if plan.employees %}
+        <h3>{{j.arrival_time}} aanwezig</h3>
 
-    {% for n in range(j.staff_required) %}
+        <div class="game-time-badge">
+          Spel: {{j.start}}–{{j.end}}
+        </div>
 
-    <div class="fieldline">
-      <label>Med. {{n+1}}</label>
+        <div class="fieldline">
+          <label>Start spel</label>
+          <input type="time" name="start_{{i}}" value="{{j.start}}">
+        </div>
 
-      <select name="staff_person_{{i}}_{{n}}">
+        <div class="fieldline">
+          <label>Einde spel</label>
+          <input type="time" name="end_{{i}}" value="{{j.end}}">
+        </div>
+      </div>
 
-        <option value="">Automatisch kiezen</option>
+      <div>
+        <div class="small">Werkblok</div>
 
-        {% for e in plan.employees %}
+        <div class="fieldline">
+          <label>Opbouw</label>
+          <input type="number" min="0" name="setup_{{i}}" value="{{j.setup_minutes}}">
+          min
+        </div>
 
-        <option
-          value="{{e.name}}"
-          {% if j.staff_names
-                and n < j.staff_names|length
-                and j.staff_names[n]==e.name %}
-            selected
-          {% endif %}>
-          {{e.name}}
-        </option>
+        <div>
+          <strong>{{j.start}}–{{j.end}}</strong> spel
+        </div>
 
+        <div class="fieldline">
+          <label>Opruimen</label>
+          <input type="number" min="0" name="cleanup_{{i}}" value="{{j.cleanup_minutes}}">
+          min
+        </div>
+
+        <div>
+          <strong>{{j.available_time}}</strong> beschikbaar
+        </div>
+      </div>
+
+      <div>
+        <div class="small">Klus</div>
+        <h3>{{j.activity}}</h3>
+        <div>{{j.location_text}}</div>
+        <div class="small">Ref. {{j.reference}}</div>
+      </div>
+
+      <div>
+
+        <div class="small">Bus / vervoer handmatig</div>
+
+        <select name="override_{{i}}">
+          <option value="">Automatisch</option>
+
+          {% for v in plan.vehicles %}
+          <option
+            value="{{v.code}}"
+            {% if j.vehicle_code==v.code %}selected{% endif %}
+          >
+            {{v.code}}
+          </option>
+          {% endfor %}
+        </select>
+
+        <div
+          class="extra-transport-person"
+          data-extra-employee-wrap="{{i}}"
+        >
+
+          <label>
+            Welke medewerker stelt de extra auto beschikbaar?
+          </label>
+
+          <select
+            name="extra_car_employee_{{i}}"
+            data-extra-employee="{{i}}"
+          >
+
+            <option value="">Kies medewerker</option>
+
+            {% for e in plan.employees %}
+
+            <option
+              value="{{e.name}}"
+              {% if j.transport_employee==e.name %}selected{% endif %}
+            >
+              {{e.name}}
+            </option>
+
+            {% endfor %}
+
+          </select>
+
+          <div class="transport-help">
+            Alleen nodig bij <strong>Extra auto medewerker</strong>.
+            JP Planner koppelt deze collega dan direct aan de klus en controleert
+            beschikbaarheid, vaardigheden en Eigen vervoer.
+          </div>
+
+        </div>
+
+        <div class="manual-note small">
+          Je kunt ook een <strong>Extra huurauto</strong> of
+          <strong>Extra auto medewerker</strong> kiezen.
+          De plaats achter de keuze is de voorraad-/vertrekbasis.
+          Herberekenen controleert daarna route, materiaal en personeel opnieuw.
+        </div>
+
+      </div>
+
+      <div>
+
+        <div class="small">Bezetting</div>
+
+        <h3>{{j.participants}} pers.</h3>
+
+        <div class="fieldline">
+          <label>Aantal</label>
+          <input
+            type="number"
+            min="1"
+            name="staff_{{i}}"
+            value="{{j.staff_required}}"
+          >
+        </div>
+
+        {% if plan.employees %}
+
+          {% for n in range(j.staff_required) %}
+
+          <div class="fieldline">
+
+            <label>Med. {{n+1}}</label>
+
+            <select name="staff_person_{{i}}_{{n}}">
+
+              <option value="">Automatisch kiezen</option>
+
+              {% for e in plan.employees %}
+
+              <option
+                value="{{e.name}}"
+                {% if j.staff_names and n < j.staff_names|length and j.staff_names[n]==e.name %}
+                  selected
+                {% endif %}
+              >
+                {{e.name}}
+              </option>
+
+              {% endfor %}
+
+            </select>
+
+          </div>
+
+          {% endfor %}
+
+          {% if j.staff_names %}
+
+          <div class="small">
+            <strong>Collega('s):</strong>
+            {{j.staff_names|join(', ')}}
+          </div>
+
+          {% endif %}
+
+          {% for w in j.staff_warnings %}
+            <div class="warn">{{w}}</div>
+          {% endfor %}
+
+        {% else %}
+
+          <div class="warn">
+            Nog geen personeel geïmporteerd.
+          </div>
+
+        {% endif %}
+
+      </div>
+
+      <div>
+
+        <div class="small">Rit naar deze klus</div>
+
+        <h3>{{j.departure_time}} vertrek</h3>
+
+        {% if j.travel_km is not none %}
+
+        <div>
+          {{j.travel_km}} km · {{j.travel_minutes}} min
+        </div>
+
+        {% else %}
+
+        <div>—</div>
+
+        {% endif %}
+
+        {% if j.status=='planned_own_transport' %}
+
+        <div class="ok">
+          Eigen vervoer + voorraadset
+        </div>
+
+        {% elif j.status=='planned_rental_car' %}
+
+        <div class="ok">
+          Extra huurauto ingepland
+        </div>
+
+        {% elif j.status=='planned_employee_car' %}
+
+        <div class="ok">
+          Extra auto medewerker ingepland
+          {% if j.transport_employee %}: {{j.transport_employee}}{% endif %}
+        </div>
+
+        {% endif %}
+
+        {% for w in j.warnings %}
+          <div class="warn">{{w}}</div>
         {% endfor %}
 
-      </select>
+      </div>
+
     </div>
-
-    {% endfor %}
-
-    {% if j.staff_names %}
-    <div class="small">
-      <strong>Collega('s):</strong>
-      {{j.staff_names|join(', ')}}
-    </div>
-    {% endif %}
-
-    {% for w in j.staff_warnings %}
-    <div class="warn">{{w}}</div>
-    {% endfor %}
-
-  {% else %}
-
-    <div class="warn">
-      Nog geen personeel geïmporteerd.
-    </div>
-
-  {% endif %}
-</div>
-
-<div>
-  <div class="small">Rit naar deze klus</div>
-
-  <h3>{{j.departure_time}} vertrek</h3>
-
-  {% if j.travel_km is not none %}
-  <div>
-    {{j.travel_km}} km · {{j.travel_minutes}} min
   </div>
-  {% else %}
-  <div>—</div>
-  {% endif %}
 
-  {% for w in j.warnings %}
-  <div class="warn">{{w}}</div>
+  <input type="hidden" name="date_{{i}}" value="{{j.date}}">
+  <input type="hidden" name="participants_{{i}}" value="{{j.participants}}">
+  <input type="hidden" name="activity_{{i}}" value="{{j.activity}}">
+  <input type="hidden" name="location_{{i}}" value="{{j.location_text}}">
+  <input type="hidden" name="reference_{{i}}" value="{{j.reference}}">
+
   {% endfor %}
-</div>
-
-</div>
-</div>
-
-<input type="hidden" name="date_{{i}}" value="{{j.date}}">
-<input type="hidden" name="participants_{{i}}" value="{{j.participants}}">
-<input type="hidden" name="activity_{{i}}" value="{{j.activity}}">
-<input type="hidden" name="location_{{i}}" value="{{j.location_text}}">
-<input type="hidden" name="reference_{{i}}" value="{{j.reference}}">
-
-{% endfor %}
 
 </div>
 
@@ -1078,50 +926,272 @@ select{width:100%;max-width:280px}
 
 {% if plan.unplanned_jobs %}
 
-<div class="card">
+<div class="card unplanned">
 
-<h2>Nog niet als dienst ingepland</h2>
+  <h2>Nog niet als dienst ingepland</h2>
 
-{% for j in plan.unplanned_jobs %}
+  <p class="muted">
+    Deze klussen staan apart omdat de automatische planning nog geen haalbare
+    vaste bus vond. Kies hieronder Eigen vervoer, Extra auto medewerker of
+    Extra huurauto; bij spellen met een standaardset gebruikt JP Planner de
+    vrije voorraad van de gekozen vertrekbasis.
+  </p>
 
-{% set i=j.form_index %}
+  {% for j in plan.unplanned_jobs %}
 
-<div class="job">
+  {% set i=j.form_index %}
 
-  <h3>{{j.activity}}</h3>
+  <div class="job {% if j.material_problem %}material{% endif %}">
 
-  <div>
-    {{j.date}} · {{j.start}}–{{j.end}}
+    <div class="job-grid">
+
+      <div>
+
+        <div class="small">Datum / tijd</div>
+
+        <h3>{{j.date}}</h3>
+
+        <div class="game-time-badge">
+          Spel: {{j.start}}–{{j.end}}
+        </div>
+
+        <div>
+          {{j.arrival_time}} aanwezig
+        </div>
+
+      </div>
+
+      <div>
+
+        <div class="small">Werkblok</div>
+
+        <div class="fieldline">
+
+          <label>Opbouw</label>
+
+          <input
+            type="number"
+            min="0"
+            name="setup_{{i}}"
+            value="{{j.setup_minutes}}"
+          >
+
+          min
+
+        </div>
+
+        <div class="fieldline">
+
+          <label>Opruimen</label>
+
+          <input
+            type="number"
+            min="0"
+            name="cleanup_{{i}}"
+            value="{{j.cleanup_minutes}}"
+          >
+
+          min
+
+        </div>
+
+        <input type="hidden" name="start_{{i}}" value="{{j.start}}">
+        <input type="hidden" name="end_{{i}}" value="{{j.end}}">
+
+      </div>
+
+      <div>
+
+        <div class="small">Klus</div>
+
+        <h3>{{j.activity}}</h3>
+
+        <div>{{j.location_text}}</div>
+
+        <div class="small">
+          Ref. {{j.reference}}
+        </div>
+
+      </div>
+
+      <div>
+
+        <div class="small">
+          Bus / vervoer handmatig
+        </div>
+
+        <select name="override_{{i}}">
+
+          <option value="">
+            Automatisch
+          </option>
+
+          {% for v in plan.vehicles %}
+
+          <option
+            value="{{v.code}}"
+            {% if j.vehicle_code==v.code %}selected{% endif %}
+          >
+            {{v.code}}
+          </option>
+
+          {% endfor %}
+
+        </select>
+
+        <div
+          class="extra-transport-person"
+          data-extra-employee-wrap="{{i}}"
+        >
+
+          <label>
+            Welke medewerker stelt de extra auto beschikbaar?
+          </label>
+
+          <select
+            name="extra_car_employee_{{i}}"
+            data-extra-employee="{{i}}"
+          >
+
+            <option value="">
+              Kies medewerker
+            </option>
+
+            {% for e in plan.employees %}
+
+            <option
+              value="{{e.name}}"
+              {% if j.transport_employee==e.name %}selected{% endif %}
+            >
+              {{e.name}}
+            </option>
+
+            {% endfor %}
+
+          </select>
+
+          <div class="transport-help">
+            Alleen nodig bij Extra auto medewerker.
+          </div>
+
+        </div>
+
+      </div>
+
+      <div>
+
+        <div class="small">
+          Bezetting
+        </div>
+
+        <h3>
+          {{j.participants}} pers.
+        </h3>
+
+        <div class="fieldline">
+
+          <label>Aantal</label>
+
+          <input
+            type="number"
+            min="1"
+            name="staff_{{i}}"
+            value="{{j.staff_required}}"
+          >
+
+        </div>
+
+        {% if plan.employees %}
+
+          {% for n in range(j.staff_required) %}
+
+          <div class="fieldline">
+
+            <label>
+              Med. {{n+1}}
+            </label>
+
+            <select name="staff_person_{{i}}_{{n}}">
+
+              <option value="">
+                Automatisch kiezen
+              </option>
+
+              {% for e in plan.employees %}
+
+              <option
+                value="{{e.name}}"
+                {% if j.staff_names and n < j.staff_names|length and j.staff_names[n]==e.name %}
+                  selected
+                {% endif %}
+              >
+                {{e.name}}
+              </option>
+
+              {% endfor %}
+
+            </select>
+
+          </div>
+
+          {% endfor %}
+
+          {% if j.staff_names %}
+
+          <div class="small">
+            <strong>Collega('s):</strong>
+            {{j.staff_names|join(', ')}}
+          </div>
+
+          {% endif %}
+
+          {% for w in j.staff_warnings %}
+          <div class="warn">{{w}}</div>
+          {% endfor %}
+
+        {% else %}
+
+        <div class="warn">
+          Nog geen personeel geïmporteerd.
+        </div>
+
+        {% endif %}
+
+      </div>
+
+      <div>
+
+        {% if j.material_problem %}
+
+        <div class="bad">
+          <strong>❗ MATERIAALPROBLEEM</strong>
+        </div>
+
+        {% else %}
+
+        <div class="bad">
+          Niet ingepland
+        </div>
+
+        {% endif %}
+
+        {% for w in j.warnings %}
+        <div class="warn">{{w}}</div>
+        {% endfor %}
+
+      </div>
+
+    </div>
+
   </div>
 
-  <div>
-    {{j.location_text}}
-  </div>
+  <input type="hidden" name="date_{{i}}" value="{{j.date}}">
+  <input type="hidden" name="participants_{{i}}" value="{{j.participants}}">
+  <input type="hidden" name="activity_{{i}}" value="{{j.activity}}">
+  <input type="hidden" name="location_{{i}}" value="{{j.location_text}}">
+  <input type="hidden" name="reference_{{i}}" value="{{j.reference}}">
 
-  {% if j.material_problem %}
-  <div class="bad">
-    <strong>❗ MATERIAALPROBLEEM</strong>
-  </div>
-  {% endif %}
-
-  {% for w in j.warnings %}
-  <div class="warn">{{w}}</div>
   {% endfor %}
-
-</div>
-
-<input type="hidden" name="date_{{i}}" value="{{j.date}}">
-<input type="hidden" name="participants_{{i}}" value="{{j.participants}}">
-<input type="hidden" name="activity_{{i}}" value="{{j.activity}}">
-<input type="hidden" name="location_{{i}}" value="{{j.location_text}}">
-<input type="hidden" name="reference_{{i}}" value="{{j.reference}}">
-<input type="hidden" name="start_{{i}}" value="{{j.start}}">
-<input type="hidden" name="end_{{i}}" value="{{j.end}}">
-<input type="hidden" name="setup_{{i}}" value="{{j.setup_minutes}}">
-<input type="hidden" name="cleanup_{{i}}" value="{{j.cleanup_minutes}}">
-<input type="hidden" name="staff_{{i}}" value="{{j.staff_required}}">
-
-{% endfor %}
 
 </div>
 
@@ -1130,295 +1200,257 @@ select{width:100%;max-width:280px}
 
 <div class="card planboard-card-title">
 
-<div class="topline">
+  <div class="topline">
 
-<div>
+    <div>
 
-<h2 class="pb-section-title">
-Dagplanning op tijdsbalk
-</h2>
+      <h2 class="pb-section-title">
+        Dagplanning op tijdsbalk
+      </h2>
 
-<p class="pb-section-note">
-Iedere activiteit heeft zijn eigen horizontale rij.
-Gelijktijdige klussen van dezelfde activiteit worden
-automatisch onder elkaar gezet.
-</p>
+      <p class="pb-section-note">
+        Iedere rij is nu één complete dienst. Alle spellen van dezelfde bus en
+        collega('s) staan op dezelfde tijdsbalk en gebruiken dezelfde dienstkleur.
+        De totale diensttijd wordt ook per collega opgeteld.
+      </p>
 
-<div class="pb-legend">
-  <span>
-    <i class="pb-dot" style="background:#dcf7e7"></i>
-    Volledig gepland
-  </span>
+      <div class="pb-legend">
 
-  <span>
-    <i class="pb-dot" style="background:#fff0b8"></i>
-    Controle / waarschuwing
-  </span>
+        <span>
+          <i class="pb-dot" style="background:#bbf7d0"></i>
+          Volledig gepland
+        </span>
 
-  <span>
-    <i class="pb-dot" style="background:#ffd9d9"></i>
-    Niet compleet ingepland
-  </span>
+        <span>
+          <i class="pb-dot" style="background:#fde68a"></i>
+          Controle / waarschuwing
+        </span>
+
+        <span>
+          <i class="pb-dot" style="background:#fecaca"></i>
+          Niet compleet ingepland
+        </span>
+
+      </div>
+
+      <div
+        id="serviceLegend"
+        class="service-legend"
+      ></div>
+
+      <div class="view-switch">
+
+        <button
+          type="button"
+          class="active"
+          data-view-button="day"
+        >
+          Dagplanning
+        </button>
+
+        <button
+          type="button"
+          data-view-button="week"
+        >
+          Weekplanning
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+
 </div>
 
-<div
-  id="serviceLegend"
-  class="service-legend">
-</div>
-
-<div class="view-switch">
-
-<button
-  type="button"
-  class="active"
-  data-view-button="day">
-  Dagplanning
-</button>
-
-<button
-  type="button"
-  data-view-button="week">
-  Weekplanning
-</button>
-
-</div>
-
-</div>
-</div>
-</div>
-
-
-<!-- ============================================================
-     DAGPLANNING v9.2
-     ============================================================ -->
 
 <div
   id="dayPlanningView"
-  class="planning-view active">
+  class="planning-view active"
+>
 
 <div class="card planboard-wrap">
 
 <div class="planboard">
 
-{% if plan.jobs %}
+{% if plan.vehicle_routes %}
 
-{% for date_group in plan.jobs|groupby('date') %}
+{% for date_group in plan.vehicle_routes|groupby('date') %}
 
-<section class="planboard-day">
-
-<div class="jp92-day-head">
-
-  <h3>{{date_group.grouper}}</h3>
-
-  <div>
-    {{date_group.list|length}}
-    klus{% if date_group.list|length != 1 %}sen{% endif %}
-  </div>
-
-</div>
-
-<div class="jp92-header">
-
-  <div class="jp92-label-head">
-    Spel / activiteit
-  </div>
-
-  <div class="jp92-hours">
-
-    {% for hour in range(8,27) %}
-
-    <span
-      class="jp92-hour"
-      style="left:{{((hour-8)/18*100)}}%">
-      {{'%02d' % (hour if hour < 24 else hour-24)}}:00
-    </span>
-
-    {% endfor %}
-
-  </div>
-
-</div>
-
-
-{% for activity_group in date_group.list|groupby('activity') %}
-
-<div class="jp92-row">
-
-<div class="jp92-game">
-
-  <strong>
-    {{activity_group.grouper}}
-  </strong>
-
-  <span>
-    {{activity_group.list|length}}
-    klus{% if activity_group.list|length != 1 %}sen{% endif %}
-  </span>
-
-</div>
-
-
-<div class="jp92-track">
-
-{% for j in activity_group.list %}
-
-
-{% set svc = namespace(key='',label='') %}
-
-{% for rr in plan.vehicle_routes %}
-{% for sj in rr.jobs %}
-
-{% if sj.form_index == j.form_index %}
-
-{% set svc.key =
-   rr.date ~ '|' ~
-   rr.service_number ~ '|' ~
-   rr.vehicle_code %}
-
-{% set svc.label =
-   'Dienst ' ~
-   rr.service_number ~
-   ' · ' ~
-   rr.vehicle_code ~
-   ((' · ' ~ (rr.staff_names|join(', ')))
-      if rr.staff_names else '') %}
-
-{% endif %}
-
-{% endfor %}
-{% endfor %}
-
-
-{% set block_class='pb-ok' %}
-
-{% if
-  j.material_problem
-  or j.staff_problem
-  or j.status in ['unplanned','not_planned']
-%}
-
-{% set block_class='pb-bad' %}
-
-{% elif j.warnings or j.staff_warnings %}
-
-{% set block_class='pb-warn' %}
-
-{% endif %}
-
-
-<div
-  class="jp92-block {{block_class}}"
-
-  data-start="{{j.departure_time or j.arrival_time or j.start}}"
-
-  data-end="{{j.available_time or j.end}}"
-
-  data-game-start="{{j.start}}"
-
-  data-game-end="{{j.end}}"
-
-  data-service-key="{{svc.key}}"
-
-  data-service-label="{{svc.label}}"
-
-  title="{{j.activity}} · {{j.location_text}}"
+<section
+  class="planboard-day"
+  data-planboard-day
 >
 
+  <div class="pb-day-head">
 
-{% if svc.label %}
+    <h3>
+      {{date_group.grouper}}
+    </h3>
 
-<div class="pb-service">
-  {{svc.label}}
-</div>
+    <div class="pb-day-summary">
+      {{date_group.list|length}}
+      dienst{% if date_group.list|length != 1 %}en{% endif %}
+    </div>
 
-{% endif %}
+  </div>
 
+  <div class="pb-header">
 
-<div class="pb-time">
+    <div class="pb-label-head">
+      Dienst / activiteiten
+    </div>
 
-Vertrek {{j.departure_time or '—'}}
+    <div class="pb-hours">
 
-· Rit
+      {% for hour in range(8,27) %}
 
-{% if j.travel_minutes is not none %}
-{{j.travel_minutes}} min
-{% else %}
-—
-{% endif %}
+      <span
+        class="pb-hour"
+        style="left:{{((hour-8)/18*100)}}%"
+      >
+        {{'%02d' % (hour if hour < 24 else hour-24)}}:00
+      </span>
 
-</div>
+      {% endfor %}
 
+    </div>
 
-<div class="pb-meta">
-
-Opbouw {{j.setup_minutes}} min
-
-</div>
-
-
-<div class="pb-main">
-
-SPEL {{j.start}}–{{j.end}}
-
-·
-
-<span class="pb-duration"></span>
-
-</div>
+  </div>
 
 
-<div class="pb-meta">
+  {% for r in date_group.list %}
 
-Opruimen {{j.cleanup_minutes}} min
+  <div class="jp92-row">
 
-· beschikbaar {{j.available_time or '—'}}
+    <div class="jp92-game">
 
-</div>
+      <strong>
+        Dienst {{r.service_number}} ·
+        {{r.activity_summary or 'Activiteiten'}}
+      </strong>
+
+      <span>
+        {{r.vehicle_code}}
+      </span>
+
+      {% if r.staff_names %}
+
+      <span>
+        {{r.staff_names|join(', ')}}
+      </span>
+
+      {% endif %}
+
+      <span>
+        <strong style="display:inline;color:#140821">
+          {{r.first_departure}}–{{r.return_time}}
+        </strong>
+        · {{r.duty_duration}}
+      </span>
+
+      {% if r.staff_duty %}
+
+        {% for sd in r.staff_duty %}
+
+        <span>
+          {{sd.name}}:
+          {{sd.duration}}
+        </span>
+
+        {% endfor %}
+
+      {% endif %}
+
+    </div>
 
 
-<div class="pb-meta">
+    <div
+      class="jp92-track"
+      data-service-row="{{r.date}}|{{r.service_number}}|{{r.vehicle_code}}"
+    >
 
-{% if j.staff_names %}
+      {% for j in r.jobs %}
 
-{{j.staff_names|join(', ')}}
+        {% set block_class = 'pb-ok' %}
 
-{% else %}
+        {% if j.material_problem or j.staff_problem or j.status in ['unplanned','not_planned'] %}
 
-Nog geen medewerker
+          {% set block_class = 'pb-bad' %}
 
-{% endif %}
+        {% elif j.warnings or j.staff_warnings %}
 
-·
+          {% set block_class = 'pb-warn' %}
 
-{% if j.vehicle_code %}
+        {% endif %}
 
-{{j.vehicle_code}}
+        <div
+          class="jp92-block {{block_class}}"
+          data-start="{{j.departure_time or j.arrival_time or j.start}}"
+          data-end="{{j.available_time or j.end}}"
+          data-game-start="{{j.start}}"
+          data-game-end="{{j.end}}"
+          data-service-key="{{r.date}}|{{r.service_number}}|{{r.vehicle_code}}"
+          data-service-label="Dienst {{r.service_number}} · {{r.activity_summary}} · {{r.vehicle_code}}{% if r.staff_names %} · {{r.staff_names|join(', ')}}{% endif %}"
+          title="{{j.activity}} · {{j.location_text}}"
+        >
 
-{% else %}
+          <div class="pb-service">
+            {{j.activity}}
+          </div>
 
-Nog geen voertuig
+          <div class="pb-time">
 
-{% endif %}
+            Vertrek {{j.departure_time or '—'}}
+            · Rit
 
-</div>
+            {% if j.travel_minutes is not none %}
+              {{j.travel_minutes}} min
+            {% else %}
+              —
+            {% endif %}
 
+          </div>
 
-<div class="pb-meta">
+          <div class="pb-meta">
+            Opbouw {{j.setup_minutes}} min
+          </div>
 
-{{j.location_text}}
+          <div class="pb-main">
+            SPEL {{j.start}}–{{j.end}}
+            · <span class="pb-duration"></span>
+          </div>
 
-</div>
+          <div class="pb-meta">
+            Opruimen {{j.cleanup_minutes}} min
+            · beschikbaar {{j.available_time or '—'}}
+          </div>
 
+          <div class="pb-meta">
 
-</div>
+            {% if j.staff_names %}
+              {{j.staff_names|join(', ')}}
+            {% else %}
+              Nog geen medewerker
+            {% endif %}
 
-{% endfor %}
+            · {{r.vehicle_code}}
 
-</div>
+          </div>
 
-</div>
+          <div class="pb-meta">
+            {{j.location_text}}
+          </div>
 
-{% endfor %}
+        </div>
+
+      {% endfor %}
+
+    </div>
+
+  </div>
+
+  {% endfor %}
 
 </section>
 
@@ -1427,9 +1459,7 @@ Nog geen voertuig
 {% else %}
 
 <div class="warn">
-
-Er zijn geen klussen beschikbaar om op het dagplanbord te tonen.
-
+  Er zijn nog geen ingeplande diensten om op het dagplanbord te tonen.
 </div>
 
 {% endif %}
@@ -1439,175 +1469,951 @@ Er zijn geen klussen beschikbaar om op het dagplanbord te tonen.
 </div>
 
 
-<!-- WEEKPLANNING -->
+{% if plan.staff_duty_totals %}
+
+<div class="card">
+
+  <h2 style="margin-top:0">
+    Diensttijd per collega
+  </h2>
+
+  <div class="summary">
+
+    {% for sd in plan.staff_duty_totals %}
+
+    <div>
+
+      <span class="small">
+        {{sd.name}}
+      </span>
+
+      <strong>
+        {{sd.duration}}
+      </strong>
+
+      <span class="small">
+        Dienst {{sd.base_duration}}
+        · pauze {{sd.pause_duration}}
+      </span>
+
+    </div>
+
+    {% endfor %}
+
+  </div>
+
+  <div class="muted" style="margin-top:10px">
+
+    Pauzeregel per dienst:
+    vanaf 5 uur 15 min = 15 min pauze;
+    vanaf 6 uur = 30 min;
+    vanaf 8 uur 30 min = 45 min.
+
+    De pauze wordt opgeteld bij de diensttijd van de collega.
+    De route- en speltijden zelf worden hierdoor niet verschoven.
+
+  </div>
+
+</div>
+
+{% endif %}
+
 
 <div
   id="weekPlanningView"
-  class="planning-view">
-
-<div class="card">
-
-<h2>Weekplanning</h2>
-
-<div class="weekboard-wrap">
-
-{% set week_dates = plan.jobs|groupby('date')|list %}
-
-{% if week_dates %}
-
-<div
-  class="weekboard"
-  style="--days:{{week_dates|length}}">
-
-<div class="wb-head">
-
-<div>Tijd</div>
-
-{% for dg in week_dates %}
-<div>{{dg.grouper}}</div>
-{% endfor %}
-
-</div>
-
-
-<div class="wb-body">
-
-<div class="wb-times">
-
-{% for hour in range(8,27) %}
-
-<span
-  class="wb-time"
-  style="top:{{((hour-8)/18*100)}}%">
-  {{'%02d' % (hour if hour < 24 else hour-24)}}:00
-</span>
-
-{% endfor %}
-
-</div>
-
-
-{% for dg in week_dates %}
-
-<div class="wb-day">
-
-{% for j in dg.list %}
-
-
-{% set svc = namespace(key='',label='') %}
-
-{% for rr in plan.vehicle_routes %}
-{% for sj in rr.jobs %}
-
-{% if sj.form_index == j.form_index %}
-
-{% set svc.key =
-   rr.date ~ '|' ~
-   rr.service_number ~ '|' ~
-   rr.vehicle_code %}
-
-{% set svc.label =
-   'Dienst ' ~
-   rr.service_number ~
-   ' · ' ~
-   rr.vehicle_code ~
-   ((' · ' ~ (rr.staff_names|join(', ')))
-      if rr.staff_names else '') %}
-
-{% endif %}
-
-{% endfor %}
-{% endfor %}
-
-
-<div
-  class="wb-event"
-
-  data-start="{{j.departure_time or j.arrival_time or j.start}}"
-
-  data-end="{{j.available_time or j.end}}"
-
-  data-game-start="{{j.start}}"
-
-  data-game-end="{{j.end}}"
-
-  data-service-key="{{svc.key}}"
-
-  data-service-label="{{svc.label}}"
+  class="planning-view"
 >
 
-{% if svc.label %}
-<div class="pb-service">
-{{svc.label}}
+  <div class="card">
+
+    <div class="view-heading">
+
+      <div>
+
+        <h2 style="margin:0 0 5px">
+          Weekplanning
+        </h2>
+
+        <div class="muted">
+          Alle dagen naast elkaar. De verticale positie beslaat de volledige inzet
+          van vertrek tot na het opruimen; de echte speltijd uit Smart Event Manager
+          staat apart in ieder blok.
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <div
+      class="weekboard-wrap"
+      style="margin-top:14px"
+    >
+
+      {% set week_dates = plan.jobs|groupby('date')|list %}
+
+      {% if week_dates %}
+
+      <div
+        class="weekboard"
+        style="--days:{{week_dates|length}}"
+      >
+
+        <div class="wb-head">
+
+          <div>Tijd</div>
+
+          {% for dg in week_dates %}
+            <div>{{dg.grouper}}</div>
+          {% endfor %}
+
+        </div>
+
+
+        <div class="wb-body">
+
+          <div class="wb-times">
+
+            {% for hour in range(8,27) %}
+
+            <span
+              class="wb-time"
+              style="top:{{((hour-8)/18*100)}}%"
+            >
+              {{'%02d' % (hour if hour < 24 else hour-24)}}:00
+            </span>
+
+            {% endfor %}
+
+          </div>
+
+
+          {% for dg in week_dates %}
+
+          <div
+            class="wb-day"
+            data-week-day
+          >
+
+            {% for j in dg.list %}
+
+              {% set svc = namespace(key='', label='') %}
+
+              {% for rr in plan.vehicle_routes %}
+                {% for sj in rr.jobs %}
+
+                  {% if sj.form_index == j.form_index %}
+
+                    {% set svc.key =
+                      rr.date ~ '|' ~
+                      rr.service_number ~ '|' ~
+                      rr.vehicle_code
+                    %}
+
+                    {% set svc.label =
+                      'Dienst ' ~
+                      rr.service_number ~
+                      ' · ' ~
+                      rr.vehicle_code ~
+                      ((' · ' ~ (rr.staff_names|join(', ')))
+                        if rr.staff_names else '')
+                    %}
+
+                  {% endif %}
+
+                {% endfor %}
+              {% endfor %}
+
+
+              {% set block_class = 'pb-ok' %}
+
+              {% if j.material_problem or j.staff_problem or j.status in ['unplanned','not_planned'] %}
+
+                {% set block_class = 'pb-bad' %}
+
+              {% elif j.warnings or j.staff_warnings %}
+
+                {% set block_class = 'pb-warn' %}
+
+              {% endif %}
+
+
+              <div
+                class="wb-event {{block_class}}"
+                data-start="{{j.departure_time or j.arrival_time or j.start}}"
+                data-end="{{j.available_time or j.end}}"
+                data-game-start="{{j.start}}"
+                data-game-end="{{j.end}}"
+                data-service-key="{{svc.key}}"
+                data-service-label="{{svc.label}}"
+                title="{{j.activity}} · {{j.location_text}}"
+              >
+
+                {% if svc.label %}
+
+                <div class="pb-service">
+                  {{svc.label}}
+                </div>
+
+                {% endif %}
+
+                <div class="wb-title">
+                  {{j.activity}}
+                </div>
+
+                <div class="wb-meta">
+
+                  Vertrek {{j.departure_time or '—'}}
+                  · rit
+
+                  {% if j.travel_minutes is not none %}
+                    {{j.travel_minutes}} min
+                  {% else %}
+                    —
+                  {% endif %}
+
+                  · opbouw {{j.setup_minutes}} min
+
+                </div>
+
+                <div class="wb-meta">
+
+                  <strong>
+                    SPEL {{j.start}}–{{j.end}}
+                    · <span class="wb-duration"></span>
+                  </strong>
+
+                </div>
+
+                <div class="wb-meta">
+
+                  Opruimen {{j.cleanup_minutes}} min
+                  · beschikbaar {{j.available_time or '—'}}
+
+                </div>
+
+                <div class="wb-meta">
+
+                  {% if j.staff_names %}
+                    {{j.staff_names|join(', ')}}
+                  {% else %}
+                    Nog geen medewerker
+                  {% endif %}
+
+                  ·
+
+                  {% if j.vehicle_code %}
+                    {{j.vehicle_code}}
+                  {% else %}
+                    Nog geen voertuig
+                  {% endif %}
+
+                </div>
+
+                <div class="wb-meta">
+                  {{j.location_text}}
+                </div>
+
+              </div>
+
+            {% endfor %}
+
+          </div>
+
+          {% endfor %}
+
+        </div>
+
+      </div>
+
+      <div class="wb-note">
+        De weekweergave gebruikt dezelfde planning als hierboven;
+        wijzigingen doe je in de dienstblokken en daarna via
+        Herbereken volledige planning.
+      </div>
+
+      {% else %}
+
+      <div class="warn">
+        Er zijn geen klussen beschikbaar voor de weekplanning.
+      </div>
+
+      {% endif %}
+
+    </div>
+
+  </div>
+
 </div>
-{% endif %}
 
-<div class="wb-title">
-{{j.activity}}
-</div>
 
-<div class="wb-meta">
+<script>
+(function(){
 
-Vertrek {{j.departure_time or '—'}}
+  const START = 8 * 60;
+  const END = 26 * 60;
+  const SPAN = END - START;
 
-· rit
+  function toMinutes(value){
 
-{% if j.travel_minutes is not none %}
-{{j.travel_minutes}} min
-{% else %}
-—
-{% endif %}
+    if(!value) return null;
 
-</div>
+    const parts = value.split(':');
 
-<div class="wb-meta">
+    if(parts.length < 2)
+      return null;
 
-<strong>
-SPEL {{j.start}}–{{j.end}}
-· <span class="wb-duration"></span>
-</strong>
+    let h = Number(parts[0]);
+    let m = Number(parts[1]);
 
-</div>
+    if(Number.isNaN(h) || Number.isNaN(m))
+      return null;
 
-<div class="wb-meta">
+    if(h < 8)
+      h += 24;
 
-{{j.location_text}}
+    return h * 60 + m;
+  }
 
-</div>
 
-</div>
+  function gameDuration(start,end){
 
-{% endfor %}
+    let s = toMinutes(start);
+    let e = toMinutes(end);
 
-</div>
+    if(s === null || e === null)
+      return '';
 
-{% endfor %}
+    if(e <= s)
+      e += 24 * 60;
 
-</div>
-</div>
+    const d = e - s;
 
-{% endif %}
+    const h = Math.floor(d / 60);
+    const m = d % 60;
 
-</div>
-</div>
+    if(h && m)
+      return h + 'u' + String(m).padStart(2,'0');
+
+    if(h)
+      return h + 'u';
+
+    return m + ' min';
+  }
+
+
+  /* Dagplanbord */
+
+  const GRID_STEP = 5;
+
+  const GRID_COLS =
+    Math.ceil(SPAN / GRID_STEP);
+
+
+  document
+  .querySelectorAll('.jp92-track')
+  .forEach(track => {
+
+    const blocks =
+      Array.from(
+        track.querySelectorAll('.jp92-block')
+      );
+
+    const items = [];
+    const laneEnds = [];
+
+
+    blocks.forEach(block => {
+
+      const dur =
+        block.querySelector('.pb-duration');
+
+      if(dur){
+
+        dur.textContent =
+          gameDuration(
+            block.dataset.gameStart,
+            block.dataset.gameEnd
+          );
+
+      }
+
+
+      let s =
+        toMinutes(block.dataset.start);
+
+      let e =
+        toMinutes(block.dataset.end);
+
+
+      if(s === null || e === null)
+        return;
+
+
+      if(e <= s)
+        e += 24 * 60;
+
+
+      const visibleStart =
+        Math.max(s,START);
+
+      const visibleEnd =
+        Math.min(e,END);
+
+
+      if(
+        visibleEnd <= START ||
+        visibleStart >= END
+      ){
+
+        block.style.display='none';
+
+        return;
+
+      }
+
+
+      items.push({
+
+        block:block,
+        start:visibleStart,
+        end:visibleEnd,
+        lane:0
+
+      });
+
+    });
+
+
+    items.sort(
+      (a,b) =>
+        a.start-b.start ||
+        a.end-b.end
+    );
+
+
+    items.forEach(item => {
+
+      let lane =
+        laneEnds.findIndex(
+          end => item.start >= end
+        );
+
+
+      if(lane === -1){
+
+        lane =
+          laneEnds.length;
+
+        laneEnds.push(
+          item.end
+        );
+
+      }else{
+
+        laneEnds[lane] =
+          item.end;
+
+      }
+
+
+      item.lane =
+        lane;
+
+    });
+
+
+    track.style.setProperty(
+      '--jp92-lanes',
+      String(
+        Math.max(
+          laneEnds.length,
+          1
+        )
+      )
+    );
+
+
+    items.forEach(item => {
+
+      const startCol =
+        Math.max(
+          1,
+          Math.floor(
+            (
+              item.start -
+              START
+            ) /
+            GRID_STEP
+          ) + 1
+        );
+
+
+      const endCol =
+        Math.min(
+          GRID_COLS + 1,
+          Math.max(
+            startCol + 1,
+            Math.ceil(
+              (
+                item.end -
+                START
+              ) /
+              GRID_STEP
+            ) + 1
+          )
+        );
+
+
+      item.block.style.gridColumn =
+        `${startCol} / ${endCol}`;
+
+
+      item.block.style.gridRow =
+        String(
+          item.lane + 1
+        );
+
+    });
+
+  });
+
+
+  /* Weekplanning */
+
+  document
+  .querySelectorAll('.wb-day')
+  .forEach(day => {
+
+    const items = [];
+    const laneEnds = [];
+
+
+    Array.from(
+      day.querySelectorAll('.wb-event')
+    )
+    .forEach(block => {
+
+      const dur =
+        block.querySelector('.wb-duration');
+
+      if(dur){
+
+        dur.textContent =
+          gameDuration(
+            block.dataset.gameStart,
+            block.dataset.gameEnd
+          );
+
+      }
+
+
+      let s =
+        toMinutes(
+          block.dataset.start
+        );
+
+      let e =
+        toMinutes(
+          block.dataset.end
+        );
+
+
+      if(s === null || e === null)
+        return;
+
+
+      if(e <= s)
+        e += 24 * 60;
+
+
+      const visibleStart =
+        Math.max(s,START);
+
+      const visibleEnd =
+        Math.min(e,END);
+
+
+      if(
+        visibleEnd <= START ||
+        visibleStart >= END
+      ){
+
+        block.style.display='none';
+
+        return;
+
+      }
+
+
+      items.push({
+
+        block:block,
+        start:visibleStart,
+        end:visibleEnd,
+        lane:0
+
+      });
+
+    });
+
+
+    items.sort(
+      (a,b) =>
+        a.start-b.start ||
+        a.end-b.end
+    );
+
+
+    items.forEach(item => {
+
+      let lane =
+        laneEnds.findIndex(
+          end => item.start >= end
+        );
+
+
+      if(lane === -1){
+
+        lane =
+          laneEnds.length;
+
+        laneEnds.push(
+          item.end
+        );
+
+      }else{
+
+        laneEnds[lane] =
+          item.end;
+
+      }
+
+
+      item.lane =
+        lane;
+
+    });
+
+
+    const laneCount =
+      Math.max(
+        laneEnds.length,
+        1
+      );
+
+
+    items.forEach(item => {
+
+      item.block.style.top =
+        (
+          (
+            item.start -
+            START
+          ) /
+          SPAN *
+          100
+        ) + '%';
+
+
+      item.block.style.height =
+        Math.max(
+          (
+            (
+              item.end -
+              item.start
+            ) /
+            SPAN *
+            100
+          ),
+          4.2
+        ) + '%';
+
+
+      item.block.style.left =
+        (
+          2 +
+          (
+            item.lane *
+            96 /
+            laneCount
+          )
+        ) + '%';
+
+
+      item.block.style.right =
+        'auto';
+
+
+      item.block.style.width =
+        Math.max(
+          (
+            96 /
+            laneCount
+          ) -
+          1.2,
+          18
+        ) + '%';
+
+    });
+
+  });
+
+
+  /* Dienstkleuren */
+
+  const palette = [
+
+    ['#6f4aa2','#eee7f6'],
+    ['#c9a227','#fff5d6'],
+    ['#2563eb','#dbeafe'],
+    ['#0f766e','#ccfbf1'],
+    ['#be185d','#fce7f3'],
+    ['#7c3aed','#ede9fe'],
+    ['#b45309','#fef3c7'],
+    ['#15803d','#dcfce7'],
+    ['#0e7490','#cffafe'],
+    ['#9f1239','#ffe4e6'],
+    ['#4f46e5','#e0e7ff'],
+    ['#a16207','#fef9c3']
+
+  ];
+
+
+  const serviceColors =
+    new Map();
+
+
+  let colorIndex = 0;
+
+
+  function colorFor(key){
+
+    if(
+      !serviceColors.has(key)
+    ){
+
+      serviceColors.set(
+        key,
+        palette[
+          colorIndex++ %
+          palette.length
+        ]
+      );
+
+    }
+
+
+    return serviceColors.get(key);
+
+  }
+
+
+  document
+  .querySelectorAll(
+    '[data-service-key]'
+  )
+  .forEach(el => {
+
+    const key =
+      el.dataset.serviceKey;
+
+
+    if(!key)
+      return;
+
+
+    const [strong,soft] =
+      colorFor(key);
+
+
+    el.style.setProperty(
+      '--service-color',
+      strong
+    );
+
+
+    el.style.setProperty(
+      '--service-soft',
+      soft
+    );
+
+
+    if(
+      el.classList.contains('jp92-block') ||
+      el.classList.contains('wb-event')
+    ){
+
+      el.classList.add(
+        'service-colored'
+      );
+
+    }
+
+  });
+
+
+  /* Legenda */
+
+  const legend =
+    document.getElementById(
+      'serviceLegend'
+    );
+
+
+  if(legend){
+
+    const seen =
+      new Set();
+
+
+    document
+    .querySelectorAll(
+      '.jp92-block[data-service-key]'
+    )
+    .forEach(el => {
+
+      const key =
+        el.dataset.serviceKey;
+
+      const label =
+        el.dataset.serviceLabel;
+
+
+      if(
+        !key ||
+        !label ||
+        seen.has(key)
+      )
+        return;
+
+
+      seen.add(key);
+
+
+      const [strong] =
+        colorFor(key);
+
+
+      const chip =
+        document.createElement(
+          'span'
+        );
+
+
+      chip.className =
+        'service-chip';
+
+
+      const dot =
+        document.createElement(
+          'i'
+        );
+
+
+      dot.style.background =
+        strong;
+
+
+      chip.appendChild(
+        dot
+      );
+
+
+      chip.appendChild(
+        document.createTextNode(
+          label
+        )
+      );
+
+
+      legend.appendChild(
+        chip
+      );
+
+    });
+
+  }
+
+
+  /* Dag / week */
+
+  const buttons =
+    document.querySelectorAll(
+      '[data-view-button]'
+    );
+
+
+  const dayView =
+    document.getElementById(
+      'dayPlanningView'
+    );
+
+
+  const weekView =
+    document.getElementById(
+      'weekPlanningView'
+    );
+
+
+  buttons.forEach(btn => {
+
+    btn.addEventListener(
+      'click',
+      () => {
+
+        buttons.forEach(
+          b =>
+            b.classList.remove(
+              'active'
+            )
+        );
+
+
+        btn.classList.add(
+          'active'
+        );
+
+
+        const isWeek =
+          btn.dataset.viewButton ===
+          'week';
+
+
+        dayView.classList.toggle(
+          'active',
+          !isWeek
+        );
+
+
+        weekView.classList.toggle(
+          'active',
+          isWeek
+        );
+
+      }
+    );
+
+  });
+
+})();
+</script>
 
 
 <div class="card">
 
-<div class="buttonbar">
+  <div class="buttonbar">
 
-<button type="submit">
-Herbereken volledige planning
-</button>
+    <button type="submit">
+      Herbereken volledige planning
+    </button>
 
-<span class="muted">
+    <span class="muted">
+      Alle handmatige voertuig- en tijdkeuzes worden opnieuw gecontroleerd
+      op haalbaarheid, reistijd en materiaal.
+    </span>
 
-Alle handmatige keuzes worden opnieuw gecontroleerd
-op haalbaarheid, reistijd, personeel en materiaal.
-
-</span>
-
-</div>
+  </div>
 
 </div>
 
@@ -1619,575 +2425,81 @@ op haalbaarheid, reistijd, personeel en materiaal.
 <script>
 (function(){
 
-const START = 8 * 60;
-const END = 26 * 60;
-const SPAN = END - START;
+  function refreshExtraTransport(){
 
-const GRID_STEP = 5;
-const GRID_COLS = Math.ceil(SPAN / GRID_STEP);
+    document
+    .querySelectorAll(
+      'select[name^="override_"]'
+    )
+    .forEach(function(sel){
 
-
-function toMinutes(value){
-
-  if(!value) return null;
-
-  const parts=value.split(':');
-
-  if(parts.length<2) return null;
-
-  let h=Number(parts[0]);
-  let m=Number(parts[1]);
-
-  if(Number.isNaN(h) || Number.isNaN(m))
-    return null;
-
-  if(h<8)
-    h+=24;
-
-  return h*60+m;
-}
-
-
-function gameDuration(start,end){
-
-  let s=toMinutes(start);
-  let e=toMinutes(end);
-
-  if(s===null || e===null)
-    return '';
-
-  if(e<=s)
-    e+=24*60;
-
-  const d=e-s;
-
-  const h=Math.floor(d/60);
-  const m=d%60;
-
-  if(h && m)
-    return h+'u'+String(m).padStart(2,'0');
-
-  if(h)
-    return h+'u';
-
-  return m+' min';
-}
-
-
-/* ============================================================
-   DAGPLANBORD v9.2
-
-   CSS GRID in plaats van absolute positionering.
-   Hierdoor kan een blok NOOIT in de activiteitrij erboven
-   of eronder terechtkomen.
-   ============================================================ */
-
-document.querySelectorAll('.jp92-track').forEach(track=>{
-
-  const blocks=
-    Array.from(
-      track.querySelectorAll('.jp92-block')
-    );
-
-  const items=[];
-  const laneEnds=[];
-
-
-  blocks.forEach(block=>{
-
-    const duration=
-      block.querySelector('.pb-duration');
-
-    if(duration){
-
-      duration.textContent=
-        gameDuration(
-          block.dataset.gameStart,
-          block.dataset.gameEnd
+      var idx =
+        sel.name.replace(
+          'override_',
+          ''
         );
 
-    }
+
+      var wrap =
+        document.querySelector(
+          '[data-extra-employee-wrap="' +
+          idx +
+          '"]'
+        );
 
 
-    let start=
-      toMinutes(block.dataset.start);
-
-    let end=
-      toMinutes(block.dataset.end);
+      if(!wrap)
+        return;
 
 
-    if(start===null || end===null)
-      return;
+      var needs =
+        (sel.value || '')
+        .indexOf(
+          'Extra auto medewerker'
+        ) === 0;
 
 
-    if(end<=start)
-      end+=24*60;
+      wrap.style.display =
+        needs ?
+        'block' :
+        'none';
 
 
-    const visibleStart=
-      Math.max(start,START);
-
-    const visibleEnd=
-      Math.min(end,END);
-
-
-    if(
-      visibleEnd<=START ||
-      visibleStart>=END
-    ){
-
-      block.style.display='none';
-
-      return;
-
-    }
+      var emp =
+        wrap.querySelector(
+          'select'
+        );
 
 
-    items.push({
-
-      block:block,
-
-      start:visibleStart,
-
-      end:visibleEnd
+      if(emp)
+        emp.disabled =
+          !needs;
 
     });
 
-  });
+  }
 
 
-  items.sort(
-    (a,b)=>
-      a.start-b.start ||
-      a.end-b.end
-  );
+  document.addEventListener(
+    'change',
+    function(e){
 
-
-  /* Alleen klussen binnen DEZELFDE activiteit
-     worden eventueel op extra lanes gezet. */
-
-  items.forEach(item=>{
-
-    let lane=
-      laneEnds.findIndex(
-        end=>item.start>=end
-      );
-
-
-    if(lane===-1){
-
-      lane=laneEnds.length;
-
-      laneEnds.push(item.end);
-
-    }else{
-
-      laneEnds[lane]=item.end;
-
-    }
-
-
-    item.lane=lane;
-
-  });
-
-
-  items.forEach(item=>{
-
-    let startCol=
-      Math.floor(
-        (item.start-START) /
-        GRID_STEP
-      )+1;
-
-
-    let endCol=
-      Math.ceil(
-        (item.end-START) /
-        GRID_STEP
-      )+1;
-
-
-    startCol=
-      Math.max(
-        1,
-        Math.min(
-          GRID_COLS,
-          startCol
+      if(
+        e.target &&
+        e.target.matches(
+          'select[name^="override_"]'
         )
-      );
+      ){
 
+        refreshExtraTransport();
 
-    endCol=
-      Math.max(
-        startCol+1,
-        Math.min(
-          GRID_COLS+1,
-          endCol
-        )
-      );
-
-
-    item.block.style.gridColumn=
-      `${startCol} / ${endCol}`;
-
-
-    item.block.style.gridRow=
-      String(item.lane+1);
-
-  });
-
-});
-
-
-/* WEEKPLANBORD */
-
-document.querySelectorAll('.wb-event')
-.forEach(block=>{
-
-  const duration=
-    block.querySelector('.wb-duration');
-
-  if(duration){
-
-    duration.textContent=
-      gameDuration(
-        block.dataset.gameStart,
-        block.dataset.gameEnd
-      );
-
-  }
-
-
-  let start=
-    toMinutes(block.dataset.start);
-
-  let end=
-    toMinutes(block.dataset.end);
-
-
-  if(start===null || end===null)
-    return;
-
-
-  if(end<=start)
-    end+=24*60;
-
-
-  const visibleStart=
-    Math.max(start,START);
-
-  const visibleEnd=
-    Math.min(end,END);
-
-
-  if(
-    visibleEnd<=START ||
-    visibleStart>=END
-  ){
-
-    block.style.display='none';
-
-    return;
-
-  }
-
-
-  block.style.top=
-    (
-      (
-        visibleStart-START
-      ) /
-      SPAN *
-      100
-    )+'%';
-
-
-  block.style.height=
-    Math.max(
-      (
-        (
-          visibleEnd-visibleStart
-        ) /
-        SPAN *
-        100
-      ),
-      4.2
-    )+'%';
-
-});
-
-
-/* DIENSTKLEUREN */
-
-const palette=[
-
-['#6f4aa2','#eee7f6'],
-['#c9a227','#fff5d6'],
-['#2563eb','#dbeafe'],
-['#0f766e','#ccfbf1'],
-['#be185d','#fce7f3'],
-['#7c3aed','#ede9fe'],
-['#b45309','#fef3c7'],
-['#15803d','#dcfce7'],
-['#0e7490','#cffafe'],
-['#9f1239','#ffe4e6'],
-['#4f46e5','#e0e7ff'],
-['#a16207','#fef9c3']
-
-];
-
-
-const serviceColors=new Map();
-
-let colorIndex=0;
-
-
-function colorFor(key){
-
-  if(!serviceColors.has(key)){
-
-    serviceColors.set(
-      key,
-      palette[
-        colorIndex++ %
-        palette.length
-      ]
-    );
-
-  }
-
-  return serviceColors.get(key);
-
-}
-
-
-document
-.querySelectorAll('[data-service-key]')
-.forEach(el=>{
-
-  const key=el.dataset.serviceKey;
-
-  if(!key)
-    return;
-
-
-  const [strong,soft]=
-    colorFor(key);
-
-
-  el.style.setProperty(
-    '--service-color',
-    strong
-  );
-
-
-  el.style.setProperty(
-    '--service-soft',
-    soft
-  );
-
-});
-
-
-/* LEGENDA */
-
-const legend=
-  document.getElementById(
-    'serviceLegend'
-  );
-
-
-if(legend){
-
-  const seen=new Set();
-
-
-  document
-  .querySelectorAll(
-    '.jp92-block[data-service-key]'
-  )
-  .forEach(el=>{
-
-    const key=
-      el.dataset.serviceKey;
-
-    const label=
-      el.dataset.serviceLabel;
-
-
-    if(
-      !key ||
-      !label ||
-      seen.has(key)
-    )
-      return;
-
-
-    seen.add(key);
-
-
-    const [strong]=
-      colorFor(key);
-
-
-    const chip=
-      document.createElement('span');
-
-    chip.className=
-      'service-chip';
-
-
-    const dot=
-      document.createElement('i');
-
-    dot.style.background=
-      strong;
-
-
-    chip.appendChild(dot);
-
-    chip.appendChild(
-      document.createTextNode(label)
-    );
-
-
-    legend.appendChild(chip);
-
-  });
-
-}
-
-
-/* DAG / WEEK KNOPPEN */
-
-const buttons=
-  document.querySelectorAll(
-    '[data-view-button]'
-  );
-
-
-const dayView=
-  document.getElementById(
-    'dayPlanningView'
-  );
-
-
-const weekView=
-  document.getElementById(
-    'weekPlanningView'
-  );
-
-
-buttons.forEach(btn=>{
-
-  btn.addEventListener(
-    'click',
-    ()=>{
-
-      buttons.forEach(
-        b=>b.classList.remove('active')
-      );
-
-
-      btn.classList.add('active');
-
-
-      const isWeek=
-        btn.dataset.viewButton==='week';
-
-
-      dayView.classList.toggle(
-        'active',
-        !isWeek
-      );
-
-
-      weekView.classList.toggle(
-        'active',
-        isWeek
-      );
+      }
 
     }
   );
 
-});
 
-
-/* EXTRA AUTO MEDEWERKER */
-
-function refreshExtraTransport(){
-
-  document
-  .querySelectorAll(
-    'select[name^="override_"]'
-  )
-  .forEach(sel=>{
-
-    const idx=
-      sel.name.replace(
-        'override_',
-        ''
-      );
-
-
-    const wrap=
-      document.querySelector(
-        '[data-extra-employee-wrap="'+
-        idx+
-        '"]'
-      );
-
-
-    if(!wrap)
-      return;
-
-
-    const needs=
-      (sel.value||'')
-      .indexOf(
-        'Extra auto medewerker'
-      )===0;
-
-
-    wrap.style.display=
-      needs ?
-      'block' :
-      'none';
-
-
-    const employee=
-      wrap.querySelector('select');
-
-
-    if(employee)
-      employee.disabled=!needs;
-
-  });
-
-}
-
-
-document.addEventListener(
-  'change',
-  event=>{
-
-    if(
-      event.target &&
-      event.target.matches(
-        'select[name^="override_"]'
-      )
-    ){
-
-      refreshExtraTransport();
-
-    }
-
-  }
-);
-
-
-refreshExtraTransport();
+  refreshExtraTransport();
 
 })();
 </script>
