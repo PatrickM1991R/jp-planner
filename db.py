@@ -112,6 +112,18 @@ def ensure_schema():
                 )""")
             cur.execute("CREATE INDEX IF NOT EXISTS saved_plans_active_idx ON saved_plans(archived,start_date DESC,updated_at DESC)")
             cur.execute("""
+                CREATE TABLE IF NOT EXISTS saved_plan_issue_resolutions (
+                    plan_id BIGINT NOT NULL REFERENCES saved_plans(id) ON DELETE CASCADE,
+                    job_key TEXT NOT NULL,
+                    issue_type TEXT NOT NULL,
+                    resolution_label TEXT NOT NULL DEFAULT '',
+                    note TEXT NOT NULL DEFAULT '',
+                    active BOOLEAN NOT NULL DEFAULT TRUE,
+                    resolved_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY(plan_id,job_key,issue_type)
+                )""")
+            cur.execute("""
                 CREATE TABLE IF NOT EXISTS saved_plan_versions (
                     id BIGSERIAL PRIMARY KEY,
                     plan_id BIGINT NOT NULL REFERENCES saved_plans(id) ON DELETE CASCADE,
@@ -1006,4 +1018,57 @@ def list_saved_plan_versions(plan_id, limit=20):
         with conn.cursor() as cur:
             cur.execute("""SELECT id,version_no,note,created_at FROM saved_plan_versions
                 WHERE plan_id=%s ORDER BY version_no DESC LIMIT %s""", (int(plan_id),int(limit)))
+            return [dict(r) for r in cur.fetchall()]
+
+
+# ---------------------------------------------------------------------------
+# Manual issue resolutions (v12.3)
+# ---------------------------------------------------------------------------
+
+def save_plan_issue_resolution(plan_id, job_key, issue_type, resolution_label='', note=''):
+    """Persist a manual operational solution for one planning problem.
+
+    issue_type is one of: material, logistics, personnel.
+    The underlying warning is not deleted; it is acknowledged as solved externally.
+    """
+    ensure_schema()
+    issue_type=(issue_type or '').strip().lower()
+    if issue_type not in {'material','logistics','personnel'}:
+        raise ValueError('Onbekend probleemtype.')
+    job_key=(job_key or '').strip()
+    if not job_key:
+        raise ValueError('Klusreferentie ontbreekt.')
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""INSERT INTO saved_plan_issue_resolutions
+                (plan_id,job_key,issue_type,resolution_label,note,active,resolved_at,updated_at)
+                VALUES (%s,%s,%s,%s,%s,TRUE,NOW(),NOW())
+                ON CONFLICT(plan_id,job_key,issue_type) DO UPDATE SET
+                    resolution_label=EXCLUDED.resolution_label,
+                    note=EXCLUDED.note,
+                    active=TRUE,resolved_at=NOW(),updated_at=NOW()""",
+                (int(plan_id),job_key,issue_type,(resolution_label or '').strip(),(note or '').strip()))
+        conn.commit()
+
+
+def clear_plan_issue_resolution(plan_id, job_key, issue_type):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE saved_plan_issue_resolutions SET active=FALSE,updated_at=NOW()
+                WHERE plan_id=%s AND job_key=%s AND issue_type=%s""",
+                (int(plan_id),(job_key or '').strip(),(issue_type or '').strip().lower()))
+        conn.commit()
+
+
+def get_plan_issue_resolutions(plan_id):
+    if not plan_id:
+        return []
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""SELECT job_key,issue_type,resolution_label,note,resolved_at
+                FROM saved_plan_issue_resolutions
+                WHERE plan_id=%s AND active=TRUE
+                ORDER BY resolved_at""", (int(plan_id),))
             return [dict(r) for r in cur.fetchall()]

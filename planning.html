@@ -290,6 +290,8 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 .jp92-block.service-colored.pb-bad{outline:2px solid #dc2626;outline-offset:-2px}
 @media(max-width:700px){.jp92-row{grid-template-columns:180px minmax(900px,1fr)!important}}
 
+
+.issue-action-box{margin-top:8px;padding:10px;border-radius:10px;border:2px solid #ef4444;background:#fff7f7}.issue-action-box strong{color:#991b1b}.issue-buttons{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.issue-buttons button{font-size:11px;padding:8px 10px}.issue-resolved{margin-top:7px;padding:9px 10px;border-radius:10px;background:#edf9f1;border:1px solid #bfe3ca;color:#166534}.issue-resolved button{background:#fff;color:#166534;border:1px solid #bfe3ca;box-shadow:none}.resolve-material{background:#c9a227}.resolve-logistics{background:#2563eb}.resolve-personnel{background:#7c3aed}
 </style>
 </head>
 <body>
@@ -297,31 +299,12 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 <div class="card">
   <div class="topline">
     <div>
-      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">JP Planner v12.0 · opgeslagen planning + archief</span></h1>
+      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v12.3 · handmatige probleemoplossing</span></h1>
       <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a> · <a href="/personnel">Personeel beheren</a></p>
       <p class="muted">Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen → terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur. Smart Event Manager blijft leidend voor spelstart en speleinde.</p>
     </div>
   </div>
 </div>
-
-{% if planning_record %}
-<div class="card">
-  <div class="topline">
-    <div>
-      <div class="small">Opgeslagen planning</div>
-      <h2 style="margin:3px 0 6px">{{planning_record.title}}</h2>
-      <div class="muted">{{planning_record.source_filename or 'Geen bestandsnaam'}} · laatste wijziging {{planning_record.updated_at.strftime('%d-%m-%Y %H:%M') if planning_record.updated_at else '—'}}</div>
-    </div>
-    <div class="buttonbar">
-      <a href="/plans" style="text-decoration:none;font-weight:800;color:#140821">Alle planningen</a>
-      <a href="/plans?archived=1" style="text-decoration:none;font-weight:800;color:#140821">Archief</a>
-      {% if not planning_record.archived %}
-      <form action="/plans/{{planning_record.id}}/archive" method="post" style="margin:0"><button type="submit">Naar archief</button></form>
-      {% endif %}
-    </div>
-  </div>
-</div>
-{% endif %}
 
 <div class="card">
   <div class="summary">
@@ -339,7 +322,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 
 <form action="/generate-logistics" method="post">
 <input type="hidden" name="row_count" value="{{plan.jobs|length}}">
-{% if planning_id %}<input type="hidden" name="planning_id" value="{{planning_id}}">{% endif %}
+<input type="hidden" name="planning_id" value="{{planning_id or ''}}">
 <div class="card">
   <div class="topline">
     <div><h2 style="margin:0 0 5px">Planning handmatig aanpassen</h2><div class="muted">Wijzig per klus de bus, eigen vervoer, start/eindtijd, opbouw of opruimtijd. Klik daarna op Herberekenen; JP Planner bouwt alle diensten en routes opnieuw op.</div></div>
@@ -438,6 +421,27 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
         {% if j.travel_km is not none %}<div>{{j.travel_km}} km · {{j.travel_minutes}} min</div>{% else %}<div>—</div>{% endif %}
         {% if j.status=='planned_own_transport' %}<div class="ok">Eigen vervoer + voorraadset</div>{% elif j.status=='planned_rental_car' %}<div class="ok">Extra huurauto ingepland</div>{% elif j.status=='planned_employee_car' %}<div class="ok">Extra auto medewerker ingepland{% if j.transport_employee %}: {{j.transport_employee}}{% endif %}</div>{% endif %}
         {% for w in j.warnings %}<div class="warn">{{w}}</div>{% endfor %}
+
+        {% set issue_key = j.reference or ('idx:' ~ j.form_index) %}
+        {% if j.material_problem or j.staff_problem or j.status == 'unplanned' %}
+        <div class="issue-action-box">
+          <strong>❗ Groot planningsprobleem</strong>
+          <div class="small">Los het operationeel op en bevestig dit hieronder. Daarna ziet JP Planner dit niet meer als blokkerend probleem.</div>
+          <div class="issue-buttons">
+            {% if j.material_problem %}<button class="resolve-material" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|material">✓ Extra materiaal geregeld</button>{% endif %}
+            {% if j.status == 'unplanned' %}<button class="resolve-logistics" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|logistics">✓ Externe auto / vervoer geregeld</button>{% endif %}
+            {% if j.staff_problem %}<button class="resolve-personnel" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|personnel">✓ Externe medewerker geregeld</button>{% endif %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% for solved in j.resolved_issues or [] %}
+        <div class="issue-resolved">
+          <strong>✓ Opgelost:</strong> {{solved.label}}
+          {% if solved.note %}<div class="small">{{solved.note}}</div>{% endif %}
+          <button type="submit" formaction="/planning/clear-issue-resolution" formmethod="post" name="issue_resolution" value="{{issue_key}}|{{solved.type}}">Oplossing terugdraaien</button>
+        </div>
+        {% endfor %}
       </div>
     </div>
   </div>
@@ -464,7 +468,26 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
       <div><div class="small">Klus</div><h3>{{j.activity}}</h3><div>{{j.location_text}}</div><div class="small">Ref. {{j.reference}}</div></div>
       <div><div class="small">Bus / vervoer handmatig</div><select name="override_{{i}}"><option value="">Automatisch</option>{% for v in plan.vehicles %}<option value="{{v.code}}" {% if j.vehicle_code==v.code %}selected{% endif %}>{{v.code}}</option>{% endfor %}</select><div class="extra-transport-person" data-extra-employee-wrap="{{i}}"><label>Welke medewerker stelt de extra auto beschikbaar?</label><select name="extra_car_employee_{{i}}" data-extra-employee="{{i}}"><option value="">Kies medewerker</option>{% for e in plan.employees %}<option value="{{e.name}}" {% if j.transport_employee==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}</select><div class="transport-help">Alleen nodig bij Extra auto medewerker.</div></div></div>
       <div><div class="small">Bezetting</div><h3>{{j.participants}} pers.</h3><div class="fieldline"><label>Aantal</label><input type="number" min="1" name="staff_{{i}}" value="{{j.staff_required}}"></div>{% if plan.employees %}{% for n in range(j.staff_required) %}<div class="fieldline"><label>Med. {{n+1}}</label><select name="staff_person_{{i}}_{{n}}"><option value="">Automatisch kiezen</option>{% for e in plan.employees %}<option value="{{e.name}}" {% if j.staff_names and n < j.staff_names|length and j.staff_names[n]==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}</select></div>{% endfor %}{% if j.staff_names %}<div class="small"><strong>Collega('s):</strong> {{j.staff_names|join(', ')}}</div>{% endif %}{% for w in j.staff_warnings %}<div class="warn">{{w}}</div>{% endfor %}{% else %}<div class="warn">Nog geen personeel geïmporteerd.</div>{% endif %}</div>
-      <div>{% if j.material_problem %}<div class="bad"><strong>❗ MATERIAALPROBLEEM</strong></div>{% else %}<div class="bad">Niet ingepland</div>{% endif %}{% for w in j.warnings %}<div class="warn">{{w}}</div>{% endfor %}</div>
+      <div>
+        {% set issue_key = j.reference or ('idx:' ~ j.form_index) %}
+        {% if j.material_problem %}<div class="bad"><strong>❗ MATERIAALPROBLEEM</strong></div>{% elif j.status == 'unplanned' %}<div class="bad"><strong>❗ LOGISTIEK PROBLEEM</strong></div>{% endif %}
+        {% if j.staff_problem %}<div class="bad"><strong>❗ PERSONEELSPROBLEEM</strong></div>{% endif %}
+        {% for w in j.warnings %}<div class="warn">{{w}}</div>{% endfor %}
+        {% for w in j.staff_warnings %}<div class="warn">{{w}}</div>{% endfor %}
+        {% if j.material_problem or j.staff_problem or j.status == 'unplanned' %}
+        <div class="issue-action-box">
+          <strong>Handmatig oplossen</strong>
+          <div class="issue-buttons">
+            {% if j.material_problem %}<button class="resolve-material" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|material">✓ Extra materiaal geregeld</button>{% endif %}
+            {% if j.status == 'unplanned' %}<button class="resolve-logistics" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|logistics">✓ Externe auto / vervoer geregeld</button>{% endif %}
+            {% if j.staff_problem %}<button class="resolve-personnel" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|personnel">✓ Externe medewerker geregeld</button>{% endif %}
+          </div>
+        </div>
+        {% endif %}
+        {% for solved in j.resolved_issues or [] %}
+        <div class="issue-resolved"><strong>✓ Opgelost:</strong> {{solved.label}} <button type="submit" formaction="/planning/clear-issue-resolution" formmethod="post" name="issue_resolution" value="{{issue_key}}|{{solved.type}}">Terugdraaien</button></div>
+        {% endfor %}
+      </div>
     </div>
   </div>
   <input type="hidden" name="date_{{i}}" value="{{j.date}}">

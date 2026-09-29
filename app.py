@@ -224,6 +224,92 @@ def _merge_source_rows_from_form(plan_id, form):
         rows[i]=row
     db.update_saved_plan_source(plan_id,rows)
 
+
+def _job_issue_key(job):
+    ref=str(job.get('reference') or '').strip()
+    if ref:
+        return ref
+    idx=job.get('form_index')
+    return f'idx:{idx}' if idx is not None else ''
+
+
+def _apply_issue_resolutions(plan, plan_id):
+    """Apply persisted operational overrides without erasing the original issue.
+
+    A manually solved issue stops counting as blocking, while the UI keeps a green
+    acknowledgement showing how it was solved.
+    """
+    if not plan or not plan_id or not db.configured():
+        return plan
+    try:
+        rows=db.get_plan_issue_resolutions(plan_id)
+    except Exception:
+        return plan
+    resolutions={(str(r.get('job_key') or ''),str(r.get('issue_type') or '')):r for r in rows}
+    if not resolutions:
+        plan.setdefault('issue_resolutions',[])
+        return plan
+
+    all_jobs=list(plan.get('jobs') or [])
+    resolved_refs=[]
+    for job in all_jobs:
+        key=_job_issue_key(job)
+        solved=[]
+        for issue_type in ('material','logistics','personnel'):
+            row=resolutions.get((key,issue_type))
+            if not row:
+                continue
+            label=row.get('resolution_label') or {
+                'material':'Extra materiaal geregeld',
+                'logistics':'Externe auto / vervoer geregeld',
+                'personnel':'Externe medewerker geregeld',
+            }[issue_type]
+            solved.append({'type':issue_type,'label':label,'note':row.get('note') or ''})
+            if issue_type=='material':
+                job['material_problem']=False
+                if job.get('status')=='material_problem':
+                    job['status']='resolved_external_material'
+                job['warnings']=[w for w in (job.get('warnings') or []) if 'MATERIAALPROBLEEM' not in str(w).upper()]
+            elif issue_type=='personnel':
+                job['staff_problem']=False
+                job['staff_warnings']=[w for w in (job.get('staff_warnings') or []) if 'PERSONEELSPROBLEEM' not in str(w).upper()]
+            elif issue_type=='logistics':
+                if job.get('status')=='unplanned':
+                    job['status']='resolved_external_transport'
+                job['warnings']=[w for w in (job.get('warnings') or []) if 'GEEN VOERTUIG' not in str(w).upper()]
+        if solved:
+            job['resolved_issues']=solved
+            job['issue_resolved']=True
+            resolved_refs.append((key,{x['type'] for x in solved}))
+
+    # Rebuild blocking collections/counters after manual resolutions.
+    plan['unplanned_jobs']=[j for j in all_jobs if j.get('status') in {'unplanned','material_problem','location_problem'}]
+    plan['unplanned_count']=len(plan['unplanned_jobs'])
+    plan['material_problem_count']=sum(1 for j in all_jobs if j.get('material_problem'))
+    plan['staff_problem_count']=sum(1 for j in all_jobs if j.get('staff_problem'))
+    plan['resolved_issue_count']=sum(len(j.get('resolved_issues') or []) for j in all_jobs)
+    plan['issue_resolutions']=rows
+
+    # Hide top-level blocking warning lines for the exact issue that has been acknowledged.
+    filtered=[]
+    for warning in (plan.get('warnings') or []):
+        text=str(warning)
+        upper=text.upper()
+        remove=False
+        for key,types in resolved_refs:
+            if key and (f'REF. {key}' in upper or f'REF {key}' in upper):
+                if 'material' in types and 'MATERIAALPROBLEEM' in upper:
+                    remove=True
+                if 'personnel' in types and 'PERSONEELSPROBLEEM' in upper:
+                    remove=True
+                if 'logistics' in types and 'GEEN VOERTUIG' in upper:
+                    remove=True
+        if not remove:
+            filtered.append(warning)
+    plan['warnings']=filtered
+    return plan
+
+
 def render_home(**kwargs):
     _auto_archive()
     active_plans=[]
@@ -336,6 +422,7 @@ def generate_logistics():
         plan.setdefault('employees',employees)
         plan.setdefault('staff_problem_count',0)
         plan_id=_current_plan_id(request.form)
+        plan=_apply_issue_resolutions(plan,plan_id)
         if db.configured():
             if not plan_id:
                 rows=[dict(j) for j in jobs]
@@ -348,6 +435,46 @@ def generate_logistics():
     except Exception as e:
         return render_home(error=f'Planning genereren mislukt: {e}')
 
+
+
+
+@app.post('/planning/resolve-issue')
+def resolve_planning_issue():
+    plan_id=_current_plan_id(request.form)
+    if not plan_id:
+        return render_home(error='Geen opgeslagen planning actief. Open of genereer eerst een planning.')
+    value=(request.form.get('issue_resolution') or '').strip()
+    parts=value.split('|',2)
+    if len(parts)<2:
+        return redirect(url_for('open_saved_plan',plan_id=plan_id))
+    job_key,issue_type=parts[0].strip(),parts[1].strip().lower()
+    labels={
+        'material':'Extra materiaal geregeld',
+        'logistics':'Externe auto / vervoer geregeld',
+        'personnel':'Externe medewerker geregeld',
+    }
+    try:
+        db.save_plan_issue_resolution(plan_id,job_key,issue_type,labels.get(issue_type,'Handmatig opgelost'))
+        record=db.get_saved_plan(plan_id)
+        if record and record.get('plan_snapshot'):
+            plan=_apply_issue_resolutions(record['plan_snapshot'],plan_id)
+            db.save_plan_snapshot(plan_id,plan,f'{labels.get(issue_type,"Probleem")} bevestigd')
+        return redirect(url_for('open_saved_plan',plan_id=plan_id))
+    except Exception as e:
+        return render_home(error=f'Probleem als opgelost markeren mislukt: {e}')
+
+
+@app.post('/planning/clear-issue-resolution')
+def clear_planning_issue_resolution():
+    plan_id=_current_plan_id(request.form)
+    value=(request.form.get('issue_resolution') or '').strip()
+    parts=value.split('|',2)
+    if plan_id and len(parts)>=2:
+        try:
+            db.clear_plan_issue_resolution(plan_id,parts[0].strip(),parts[1].strip().lower())
+        except Exception:
+            pass
+    return redirect(url_for('open_saved_plan',plan_id=plan_id)) if plan_id else redirect(url_for('index'))
 
 
 @app.get('/plans')
@@ -381,6 +508,7 @@ def open_saved_plan(plan_id):
     if record.get('plan_snapshot'):
         plan=record['plan_snapshot']
         # Lists/dicts from JSONB are directly usable by Jinja.
+        plan=_apply_issue_resolutions(plan,plan_id)
         return render_template('planning.html',plan=plan,planning_id=plan_id,planning_record=record)
     rows=record.get('source_rows') or []
     return render_home(rows=rows,planning_id=plan_id,message=f"{record['title']} geopend. Genereer de logistieke planning om verder te gaan.")
