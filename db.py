@@ -110,6 +110,9 @@ def ensure_schema():
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )""")
+            cur.execute("ALTER TABLE saved_plans ADD COLUMN IF NOT EXISTS roster_status TEXT NOT NULL DEFAULT 'draft'")
+            cur.execute("ALTER TABLE saved_plans ADD COLUMN IF NOT EXISTS roster_finalized_at TIMESTAMPTZ")
+            cur.execute("ALTER TABLE saved_plans ADD COLUMN IF NOT EXISTS roster_reopened_at TIMESTAMPTZ")
             cur.execute("CREATE INDEX IF NOT EXISTS saved_plans_active_idx ON saved_plans(archived,start_date DESC,updated_at DESC)")
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS saved_plan_issue_resolutions (
@@ -471,9 +474,16 @@ def _ensure_personnel_schema(cur):
             active BOOLEAN NOT NULL DEFAULT TRUE,
             notes TEXT NOT NULL DEFAULT '',
             level INTEGER NULL,
+            email TEXT NOT NULL DEFAULT '',
+            password_hash TEXT NOT NULL DEFAULT '',
+            portal_active BOOLEAN NOT NULL DEFAULT TRUE,
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )""")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS level INTEGER NULL")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS portal_active BOOLEAN NOT NULL DEFAULT TRUE")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS employees_email_unique_idx ON employees(LOWER(email)) WHERE email <> ''")
     cur.execute("UPDATE employees SET level=4 WHERE (LOWER(name) IN ('willeke','dennis','jorian') OR LOWER(name) LIKE 'willeke %' OR LOWER(name) LIKE 'dennis %' OR LOWER(name) LIKE 'jorian %') AND level IS NULL")
     cur.execute("""
         CREATE TABLE IF NOT EXISTS employee_availability (
@@ -505,6 +515,48 @@ def _ensure_personnel_schema(cur):
             VALUES (%s,TRUE,%s,'')
             ON CONFLICT(activity) DO NOTHING
         """, (activity, idx))
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS employee_shifts (
+            id BIGSERIAL PRIMARY KEY,
+            plan_id BIGINT REFERENCES saved_plans(id) ON DELETE SET NULL,
+            employee_id BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+            service_key TEXT NOT NULL,
+            work_date DATE NOT NULL,
+            activity_summary TEXT NOT NULL DEFAULT '',
+            vehicle_code TEXT NOT NULL DEFAULT '',
+            location_summary TEXT NOT NULL DEFAULT '',
+            planned_start TIME NOT NULL,
+            planned_end TIME NOT NULL,
+            planned_end_next_day BOOLEAN NOT NULL DEFAULT FALSE,
+            planned_gross_minutes INTEGER NOT NULL DEFAULT 0,
+            planned_break_minutes INTEGER NOT NULL DEFAULT 0,
+            planned_net_minutes INTEGER NOT NULL DEFAULT 0,
+            actual_start TIME,
+            actual_end TIME,
+            actual_end_next_day BOOLEAN NOT NULL DEFAULT FALSE,
+            actual_break_minutes INTEGER,
+            actual_gross_minutes INTEGER,
+            actual_net_minutes INTEGER,
+            status TEXT NOT NULL DEFAULT 'scheduled',
+            employee_note TEXT NOT NULL DEFAULT '',
+            planner_note TEXT NOT NULL DEFAULT '',
+            employee_token TEXT NOT NULL DEFAULT '',
+            planner_approval_token TEXT NOT NULL DEFAULT '',
+            finalized_at TIMESTAMPTZ,
+            reminder_sent_at TIMESTAMPTZ,
+            response_deadline TIMESTAMPTZ,
+            employee_responded_at TIMESTAMPTZ,
+            planner_approved_at TIMESTAMPTZ,
+            auto_approved_at TIMESTAMPTZ,
+            reopened_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE(plan_id, employee_id, service_key)
+        )""")
+    cur.execute("CREATE INDEX IF NOT EXISTS employee_shifts_employee_date_idx ON employee_shifts(employee_id,work_date)")
+    cur.execute("CREATE INDEX IF NOT EXISTS employee_shifts_status_idx ON employee_shifts(status,response_deadline)")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS employee_shifts_employee_token_idx ON employee_shifts(employee_token) WHERE employee_token <> ''")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS employee_shifts_planner_token_idx ON employee_shifts(planner_approval_token) WHERE planner_approval_token <> ''")
     cur.execute("""
         CREATE TABLE IF NOT EXISTS personnel_imports (
             id BIGSERIAL PRIMARY KEY,
@@ -688,7 +740,7 @@ def set_personnel_skill_active(activity, active):
                 raise ValueError('Vaardigheid niet gevonden.')
         conn.commit()
 
-def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbekend', notes='', level=''):
+def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbekend', notes='', level='', email='', password_hash='', portal_active=True):
     name = (name or '').strip()
     if not name:
         raise ValueError('Naam ontbreekt.')
@@ -697,11 +749,11 @@ def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbe
         with conn.cursor() as cur:
             _ensure_personnel_schema(cur)
             cur.execute("""
-                INSERT INTO employees(name,driving_license,own_transport,active,notes,level,updated_at)
-                VALUES (%s,%s,%s,TRUE,%s,%s,NOW())
+                INSERT INTO employees(name,driving_license,own_transport,active,notes,level,email,password_hash,portal_active,updated_at)
+                VALUES (%s,%s,%s,TRUE,%s,%s,%s,%s,%s,NOW())
                 ON CONFLICT(name) DO NOTHING
                 RETURNING id
-            """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend', notes or '', int(level) if str(level).strip() in {'0','1','2','3','4'} else None))
+            """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend', notes or '', int(level) if str(level).strip() in {'0','1','2','3','4'} else None, (email or '').strip().lower(), password_hash or '', bool(portal_active)))
             created = cur.fetchone()
             if not created:
                 raise ValueError('Deze medewerker bestaat al.')
@@ -719,7 +771,7 @@ def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbe
 
 
 def save_personnel_employee(employee_id, name, driving_license, own_transport, active, notes, level,
-                            enabled_week_modes, availability_by_mode, skills):
+                            enabled_week_modes, availability_by_mode, skills, email='', password_hash=None, portal_active=True):
     ensure_schema()
     employee_id = int(employee_id)
     name = (name or '').strip()
@@ -731,11 +783,20 @@ def save_personnel_employee(employee_id, name, driving_license, own_transport, a
     with connection() as conn:
         with conn.cursor() as cur:
             _ensure_personnel_schema(cur)
-            cur.execute("""
-                UPDATE employees SET name=%s,driving_license=%s,own_transport=%s,
-                    active=%s,notes=%s,level=%s,updated_at=NOW() WHERE id=%s
-            """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend',
-                  bool(active), notes or '', int(level) if str(level).strip() in {'0','1','2','3','4'} else None, employee_id))
+            if password_hash is None:
+                cur.execute("""
+                    UPDATE employees SET name=%s,driving_license=%s,own_transport=%s,
+                        active=%s,notes=%s,level=%s,email=%s,portal_active=%s,updated_at=NOW() WHERE id=%s
+                """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend',
+                      bool(active), notes or '', int(level) if str(level).strip() in {'0','1','2','3','4'} else None,
+                      (email or '').strip().lower(), bool(portal_active), employee_id))
+            else:
+                cur.execute("""
+                    UPDATE employees SET name=%s,driving_license=%s,own_transport=%s,
+                        active=%s,notes=%s,level=%s,email=%s,password_hash=%s,portal_active=%s,updated_at=NOW() WHERE id=%s
+                """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend',
+                      bool(active), notes or '', int(level) if str(level).strip() in {'0','1','2','3','4'} else None,
+                      (email or '').strip().lower(), password_hash or '', bool(portal_active), employee_id))
             if cur.rowcount != 1:
                 raise ValueError('Medewerker niet gevonden.')
             cur.execute("DELETE FROM employee_availability WHERE employee_id=%s", (employee_id,))
@@ -771,7 +832,7 @@ def get_personnel():
     with connection() as conn:
         with conn.cursor() as cur:
             _ensure_personnel_schema(cur)
-            cur.execute("SELECT id,name,driving_license,own_transport,active,notes,level,updated_at FROM employees ORDER BY name")
+            cur.execute("SELECT id,name,driving_license,own_transport,active,notes,level,email,portal_active,(password_hash <> '') AS has_password,updated_at FROM employees ORDER BY name")
             employees = [dict(r) for r in cur.fetchall()]
             cur.execute("SELECT employee_id,week_mode,slot,status FROM employee_availability ORDER BY employee_id,week_mode,slot")
             availability = [dict(r) for r in cur.fetchall()]
@@ -1078,3 +1139,293 @@ def get_plan_issue_resolutions(plan_id):
                 WHERE plan_id=%s AND active=TRUE
                 ORDER BY resolved_at""", (int(plan_id),))
             return [dict(r) for r in cur.fetchall()]
+
+# --- Personnel administration / hours (v13.0) -----------------------------
+
+def get_employee_by_email(email):
+    email=(email or '').strip().lower()
+    if not email:
+        return None
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""SELECT id,name,email,password_hash,portal_active,active,level
+                           FROM employees WHERE LOWER(email)=%s LIMIT 1""", (email,))
+            row=cur.fetchone()
+    return dict(row) if row else None
+
+
+def get_employee_by_id(employee_id):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""SELECT id,name,email,password_hash,portal_active,active,level,
+                                  driving_license,own_transport,notes
+                           FROM employees WHERE id=%s""", (int(employee_id),))
+            row=cur.fetchone()
+    return dict(row) if row else None
+
+
+def set_saved_plan_roster_status(plan_id, status, finalized=False, reopened=False):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            sets=["roster_status=%s", "updated_at=NOW()"]
+            params=[status]
+            if finalized:
+                sets.append("roster_finalized_at=NOW()")
+                sets.append("roster_reopened_at=NULL")
+            if reopened:
+                sets.append("roster_reopened_at=NOW()")
+            params.append(int(plan_id))
+            cur.execute(f"UPDATE saved_plans SET {', '.join(sets)} WHERE id=%s", params)
+        conn.commit()
+
+
+def replace_plan_shifts(plan_id, shifts):
+    """Synchronise the finalized roster for one saved plan.
+
+    Existing employee responses are preserved when the same employee/service remains.
+    Removed shifts are deleted only while they are not already approved/pending approval.
+    """
+    ensure_schema()
+    keep=[]
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            for sh in shifts:
+                key=(int(plan_id), int(sh['employee_id']), sh['service_key'])
+                keep.append((int(sh['employee_id']), sh['service_key']))
+                cur.execute("""SELECT id,status FROM employee_shifts
+                               WHERE plan_id=%s AND employee_id=%s AND service_key=%s""", key)
+                existing=cur.fetchone()
+                if existing and existing['status'] in {'pending_planner','approved','auto_approved','planner_approved'}:
+                    # Preserve submitted/approved hours. Planner can explicitly reopen/edit later.
+                    cur.execute("""UPDATE employee_shifts SET activity_summary=%s,vehicle_code=%s,
+                                      location_summary=%s,updated_at=NOW() WHERE id=%s""",
+                                (sh.get('activity_summary',''),sh.get('vehicle_code',''),sh.get('location_summary',''),existing['id']))
+                    continue
+                cur.execute("""
+                    INSERT INTO employee_shifts(
+                        plan_id,employee_id,service_key,work_date,activity_summary,vehicle_code,location_summary,
+                        planned_start,planned_end,planned_end_next_day,planned_gross_minutes,planned_break_minutes,
+                        planned_net_minutes,actual_start,actual_end,actual_end_next_day,actual_break_minutes,
+                        actual_gross_minutes,actual_net_minutes,status,employee_note,planner_note,employee_token,
+                        planner_approval_token,finalized_at,reminder_sent_at,response_deadline,employee_responded_at,
+                        planner_approved_at,auto_approved_at,reopened_at,updated_at
+                    ) VALUES (
+                        %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'scheduled','','',%s,'',NOW(),NULL,%s,NULL,NULL,NULL,NULL,NOW()
+                    )
+                    ON CONFLICT(plan_id,employee_id,service_key) DO UPDATE SET
+                        work_date=EXCLUDED.work_date,activity_summary=EXCLUDED.activity_summary,
+                        vehicle_code=EXCLUDED.vehicle_code,location_summary=EXCLUDED.location_summary,
+                        planned_start=EXCLUDED.planned_start,planned_end=EXCLUDED.planned_end,
+                        planned_end_next_day=EXCLUDED.planned_end_next_day,
+                        planned_gross_minutes=EXCLUDED.planned_gross_minutes,
+                        planned_break_minutes=EXCLUDED.planned_break_minutes,
+                        planned_net_minutes=EXCLUDED.planned_net_minutes,
+                        actual_start=EXCLUDED.actual_start,actual_end=EXCLUDED.actual_end,
+                        actual_end_next_day=EXCLUDED.actual_end_next_day,
+                        actual_break_minutes=EXCLUDED.actual_break_minutes,
+                        actual_gross_minutes=EXCLUDED.actual_gross_minutes,actual_net_minutes=EXCLUDED.actual_net_minutes,
+                        status='scheduled',employee_note='',planner_note='',employee_token=EXCLUDED.employee_token,
+                        planner_approval_token='',finalized_at=NOW(),reminder_sent_at=NULL,
+                        response_deadline=EXCLUDED.response_deadline,employee_responded_at=NULL,
+                        planner_approved_at=NULL,auto_approved_at=NULL,reopened_at=NULL,updated_at=NOW()
+                """, (
+                    int(plan_id),int(sh['employee_id']),sh['service_key'],sh['work_date'],sh.get('activity_summary',''),
+                    sh.get('vehicle_code',''),sh.get('location_summary',''),sh['planned_start'],sh['planned_end'],
+                    bool(sh.get('planned_end_next_day')),int(sh['planned_gross_minutes']),int(sh['planned_break_minutes']),
+                    int(sh['planned_net_minutes']),sh['planned_start'],sh['planned_end'],bool(sh.get('planned_end_next_day')),
+                    int(sh['planned_break_minutes']),int(sh['planned_gross_minutes']),int(sh['planned_net_minutes']),
+                    sh['employee_token'],sh['response_deadline'],
+                ))
+            if keep:
+                clauses=[]; params=[int(plan_id)]
+                for emp_id,service_key in keep:
+                    clauses.append('(employee_id=%s AND service_key=%s)')
+                    params.extend([emp_id,service_key])
+                cur.execute(f"""DELETE FROM employee_shifts WHERE plan_id=%s
+                                AND status IN ('scheduled','waiting_employee','reopened')
+                                AND NOT ({' OR '.join(clauses)})""", params)
+            else:
+                cur.execute("DELETE FROM employee_shifts WHERE plan_id=%s AND status IN ('scheduled','waiting_employee','reopened')", (int(plan_id),))
+        conn.commit()
+
+
+def list_plan_shifts(plan_id):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""SELECT s.*,e.name AS employee_name,e.email AS employee_email
+                           FROM employee_shifts s JOIN employees e ON e.id=s.employee_id
+                           WHERE s.plan_id=%s ORDER BY s.work_date,s.planned_start,e.name""", (int(plan_id),))
+            rows=[dict(r) for r in cur.fetchall()]
+    return rows
+
+
+def list_employee_shifts(employee_id, start_date=None, end_date=None):
+    ensure_schema()
+    where=['s.employee_id=%s']; params=[int(employee_id)]
+    if start_date:
+        where.append('s.work_date >= %s'); params.append(start_date)
+    if end_date:
+        where.append('s.work_date <= %s'); params.append(end_date)
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute(f"""SELECT s.*,p.title AS plan_title
+                            FROM employee_shifts s LEFT JOIN saved_plans p ON p.id=s.plan_id
+                            WHERE {' AND '.join(where)}
+                            ORDER BY s.work_date,s.planned_start""", params)
+            return [dict(r) for r in cur.fetchall()]
+
+
+def get_shift_by_employee_token(token):
+    token=(token or '').strip()
+    if not token: return None
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""SELECT s.*,e.name AS employee_name,e.email AS employee_email,p.title AS plan_title
+                           FROM employee_shifts s JOIN employees e ON e.id=s.employee_id
+                           LEFT JOIN saved_plans p ON p.id=s.plan_id
+                           WHERE s.employee_token=%s LIMIT 1""", (token,))
+            row=cur.fetchone()
+    return dict(row) if row else None
+
+
+def get_shift_by_planner_token(token):
+    token=(token or '').strip()
+    if not token: return None
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""SELECT s.*,e.name AS employee_name,e.email AS employee_email,p.title AS plan_title
+                           FROM employee_shifts s JOIN employees e ON e.id=s.employee_id
+                           LEFT JOIN saved_plans p ON p.id=s.plan_id
+                           WHERE s.planner_approval_token=%s LIMIT 1""", (token,))
+            row=cur.fetchone()
+    return dict(row) if row else None
+
+
+def submit_employee_hours(shift_id, actual_start, actual_end, end_next_day, break_minutes,
+                          gross_minutes, net_minutes, note, changed, planner_token=''):
+    ensure_schema()
+    status='pending_planner' if changed else 'approved'
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE employee_shifts SET actual_start=%s,actual_end=%s,actual_end_next_day=%s,
+                           actual_break_minutes=%s,actual_gross_minutes=%s,actual_net_minutes=%s,
+                           employee_note=%s,status=%s,planner_approval_token=%s,
+                           employee_responded_at=NOW(),planner_approved_at=CASE WHEN %s THEN NULL ELSE NOW() END,
+                           updated_at=NOW() WHERE id=%s""",
+                        (actual_start,actual_end,bool(end_next_day),int(break_minutes),int(gross_minutes),int(net_minutes),
+                         note or '',status,planner_token or '',bool(changed),int(shift_id)))
+        conn.commit()
+
+
+def approve_shift_by_planner(shift_id, planner_note=''):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE employee_shifts SET status='planner_approved',planner_note=%s,
+                           planner_approved_at=NOW(),planner_approval_token='',updated_at=NOW() WHERE id=%s""",
+                        (planner_note or '',int(shift_id)))
+        conn.commit()
+
+
+def reopen_shift(shift_id, response_deadline, note=''):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE employee_shifts SET status='reopened',planner_note=%s,reopened_at=NOW(),
+                           response_deadline=%s,reminder_sent_at=NULL,employee_responded_at=NULL,
+                           planner_approved_at=NULL,auto_approved_at=NULL,planner_approval_token='',updated_at=NOW()
+                           WHERE id=%s""", (note or '',response_deadline,int(shift_id)))
+        conn.commit()
+
+
+def planner_update_shift(shift_id, actual_start, actual_end, end_next_day, break_minutes,
+                         gross_minutes, net_minutes, note='', approve=True):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE employee_shifts SET actual_start=%s,actual_end=%s,actual_end_next_day=%s,
+                           actual_break_minutes=%s,actual_gross_minutes=%s,actual_net_minutes=%s,
+                           planner_note=%s,status=%s,planner_approved_at=CASE WHEN %s THEN NOW() ELSE planner_approved_at END,
+                           updated_at=NOW() WHERE id=%s""",
+                        (actual_start,actual_end,bool(end_next_day),int(break_minutes),int(gross_minutes),int(net_minutes),
+                         note or '', 'planner_approved' if approve else 'reopened', bool(approve), int(shift_id)))
+        conn.commit()
+
+
+def shifts_due_for_reminder(now_iso):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""SELECT s.*,e.name AS employee_name,e.email AS employee_email
+                           FROM employee_shifts s JOIN employees e ON e.id=s.employee_id
+                           WHERE s.status IN ('scheduled','reopened') AND s.reminder_sent_at IS NULL
+                             AND (((s.work_date + s.planned_end) AT TIME ZONE 'Europe/Amsterdam')
+                                  + CASE WHEN s.planned_end_next_day THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) <= %s::timestamptz
+                           ORDER BY s.work_date,s.planned_end""", (now_iso,))
+            return [dict(r) for r in cur.fetchall()]
+
+
+def mark_shift_reminder_sent(shift_id):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE employee_shifts SET reminder_sent_at=NOW(),status='waiting_employee',updated_at=NOW()
+                           WHERE id=%s AND status IN ('scheduled','reopened')""", (int(shift_id),))
+        conn.commit()
+
+
+def auto_approve_expired_shifts(now_iso):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE employee_shifts SET status='auto_approved',auto_approved_at=NOW(),updated_at=NOW()
+                           WHERE status IN ('scheduled','waiting_employee','reopened')
+                             AND response_deadline IS NOT NULL AND response_deadline <= %s::timestamptz
+                           RETURNING id""", (now_iso,))
+            rows=cur.fetchall()
+        conn.commit()
+    return len(rows)
+
+
+def personnel_hours_month(year, month):
+    ensure_schema()
+    start=f"{int(year):04d}-{int(month):02d}-01"
+    if int(month)==12:
+        end=f"{int(year)+1:04d}-01-01"
+    else:
+        end=f"{int(year):04d}-{int(month)+1:02d}-01"
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""SELECT s.*,e.name AS employee_name,e.email AS employee_email
+                           FROM employee_shifts s JOIN employees e ON e.id=s.employee_id
+                           WHERE s.work_date >= %s AND s.work_date < %s
+                           ORDER BY e.name,s.work_date,s.planned_start""", (start,end))
+            rows=[dict(r) for r in cur.fetchall()]
+    totals={}
+    for r in rows:
+        t=totals.setdefault(r['employee_id'],{'employee_id':r['employee_id'],'name':r['employee_name'],'gross_minutes':0,'break_minutes':0,'net_minutes':0,'days':set(),'shifts':0})
+        gross=r['actual_gross_minutes'] if r['actual_gross_minutes'] is not None else r['planned_gross_minutes']
+        brk=r['actual_break_minutes'] if r['actual_break_minutes'] is not None else r['planned_break_minutes']
+        net=r['actual_net_minutes'] if r['actual_net_minutes'] is not None else r['planned_net_minutes']
+        t['gross_minutes']+=int(gross or 0); t['break_minutes']+=int(brk or 0); t['net_minutes']+=int(net or 0)
+        t['days'].add(str(r['work_date'])); t['shifts']+=1
+    out=[]
+    for t in totals.values():
+        t['days']=len(t['days']); out.append(t)
+    out.sort(key=lambda x:x['name'].casefold())
+    return rows,out

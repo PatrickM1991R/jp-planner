@@ -25,21 +25,21 @@ def _format_minutes(value):
 
 
 def _break_minutes(duty_minutes):
-    """JP Activiteiten break rule, applied per individual service/duty.
+    """JP Activiteiten pauzeregel v13.0.
 
-    Thresholds are inclusive and based on the duty span before adding the break:
-    - from 5h15 (315 min): 15 min break
-    - from 6h00 (360 min): 30 min break
-    - from 8h30 (510 min): 45 min break
+    Pauze is eigen tijd en wordt dus van de betaalde werktijd afgetrokken.
+    - tot 5,5 uur dienst: 15 minuten pauze
+    - vanaf 5,5 uur: 30 minuten pauze
+    - vanaf 8 uur: 45 minuten pauze
     """
     minutes = max(0, int(round(duty_minutes or 0)))
-    if minutes >= 510:
+    if minutes <= 0:
+        return 0
+    if minutes >= 480:
         return 45
-    if minutes >= 360:
+    if minutes >= 330:
         return 30
-    if minutes >= 315:
-        return 15
-    return 0
+    return 15
 
 def _week_mode(date_text):
     week = datetime.fromisoformat(date_text).isocalendar().week
@@ -318,7 +318,7 @@ def assign_staff_to_plan(plan, employees, manual_overrides=None):
             except Exception:
                 minutes = int(route.get('duty_minutes') or 0)
             pause_minutes = _break_minutes(minutes)
-            total_minutes = minutes + pause_minutes
+            total_minutes = max(0, minutes - pause_minutes)
             duty_rows.append({
                 'name': name,
                 'base_minutes': minutes,

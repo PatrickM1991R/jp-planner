@@ -1,7 +1,8 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import secrets
 from flask import Flask, render_template, request, redirect, url_for, session
 from dotenv import load_dotenv
 import db
@@ -11,6 +12,8 @@ from parser import parse_upload
 from planning_engine import build_logistics_plan
 from personnel_engine import assign_staff_to_plan
 from staff_parser import parse_personnel_workbook
+from werkzeug.security import generate_password_hash, check_password_hash
+import mail_service
 
 load_dotenv(); app=Flask(__name__); app.secret_key=os.getenv('FLASK_SECRET_KEY','dev-change-me')
 
@@ -459,7 +462,7 @@ def generate_logistics():
             _merge_source_rows_from_form(plan_id,request.form)
             db.save_plan_snapshot(plan_id,plan,'Planning herberekend')
         record=db.get_saved_plan(plan_id) if plan_id and db.configured() else None
-        return render_template('planning.html',plan=plan,planning_id=plan_id,planning_record=record)
+        return render_template('planning.html',plan=plan,planning_id=plan_id,planning_record=record,message=None)
     except Exception as e:
         return render_home(error=f'Planning genereren mislukt: {e}')
 
@@ -537,7 +540,7 @@ def open_saved_plan(plan_id):
         plan=record['plan_snapshot']
         # Lists/dicts from JSONB are directly usable by Jinja.
         plan=_apply_issue_resolutions(plan,plan_id)
-        return render_template('planning.html',plan=plan,planning_id=plan_id,planning_record=record)
+        return render_template('planning.html',plan=plan,planning_id=plan_id,planning_record=record,message=request.args.get('message'))
     rows=record.get('source_rows') or []
     return render_home(rows=rows,planning_id=plan_id,message=f"{record['title']} geopend. Genereer de logistieke planning om verder te gaan.")
 
@@ -583,12 +586,16 @@ def personnel():
 @app.post('/personnel/add')
 def personnel_add():
     try:
+        password=(request.form.get('password') or '').strip()
         db.add_personnel_employee(
             request.form.get('name',''),
             request.form.get('driving_license','Onbekend'),
             request.form.get('own_transport','Onbekend'),
             request.form.get('notes',''),
             request.form.get('level',''),
+            request.form.get('email',''),
+            generate_password_hash(password) if password else '',
+            request.form.get('portal_active','on')=='on',
         )
         return redirect(url_for('personnel',message='Nieuwe medewerker toegevoegd.'))
     except Exception as e:
@@ -620,10 +627,273 @@ def personnel_save():
             enabled_week_modes=enabled,
             availability_by_mode=availability,
             skills=skills,
+            email=request.form.get('email',''),
+            password_hash=(generate_password_hash((request.form.get('password') or '').strip())
+                           if (request.form.get('password') or '').strip() else None),
+            portal_active=request.form.get('portal_active')=='on',
         )
         return redirect(url_for('personnel',message=f"{request.form.get('name','Medewerker')} opgeslagen."))
     except Exception as e:
         return redirect(url_for('personnel',message=f'Opslaan mislukt: {e}'))
+
+
+def _fmt_minutes(minutes):
+    minutes=max(0,int(minutes or 0))
+    return f"{minutes//60}u {minutes%60:02d}m" if minutes>=60 else f"{minutes} min"
+
+
+def _v13_break_minutes(gross_minutes):
+    """Pauze is eigen tijd en wordt van betaalde werktijd afgetrokken."""
+    gross=max(0,int(gross_minutes or 0))
+    if gross <= 0:
+        return 0
+    if gross >= 480:
+        return 45
+    if gross >= 330:
+        return 30
+    return 15
+
+
+def _time_span_minutes(start_text,end_text,end_next_day=False):
+    sh,sm=[int(x) for x in str(start_text).split(':')[:2]]
+    eh,em=[int(x) for x in str(end_text).split(':')[:2]]
+    start=sh*60+sm; end=eh*60+em
+    if end_next_day or end <= start:
+        end += 24*60
+    return max(0,end-start)
+
+
+def _plan_to_employee_shifts(plan_id, plan):
+    employees,_=db.get_personnel()
+    by_name={str(e.get('name') or '').strip().casefold():e for e in employees}
+    shifts=[]
+    for route in plan.get('vehicle_routes',[]) or []:
+        date_text=str(route.get('date') or '').strip()
+        if not date_text:
+            continue
+        service_no=route.get('service_number') or route.get('vehicle_code') or 'dienst'
+        vehicle=str(route.get('vehicle_code') or '')
+        locations=[]
+        for job in route.get('jobs',[]) or []:
+            loc=(job.get('location_text') or '').strip()
+            if loc and loc not in locations:
+                locations.append(loc)
+        for duty in route.get('staff_duty',[]) or []:
+            name=(duty.get('name') or '').strip()
+            emp=by_name.get(name.casefold())
+            if not emp:
+                continue
+            start=(duty.get('start') or route.get('first_departure') or '').strip()
+            end=(duty.get('end') or route.get('return_time') or '').strip()
+            if not start or not end or ':' not in start or ':' not in end:
+                continue
+            try:
+                gross=int(duty.get('base_minutes') or _time_span_minutes(start,end))
+            except Exception:
+                gross=_time_span_minutes(start,end)
+            end_next=_time_span_minutes(start,end) != max(0,((int(end[:2])*60+int(end[3:5]))-(int(start[:2])*60+int(start[3:5]))))
+            pause=_v13_break_minutes(gross)
+            net=max(0,gross-pause)
+            work_date=datetime.fromisoformat(date_text).date()
+            end_dt=datetime.combine(work_date,datetime.strptime(end,'%H:%M').time(),tzinfo=ZoneInfo('Europe/Amsterdam'))
+            start_dt=datetime.combine(work_date,datetime.strptime(start,'%H:%M').time(),tzinfo=ZoneInfo('Europe/Amsterdam'))
+            if end_dt <= start_dt:
+                end_dt += timedelta(days=1); end_next=True
+            deadline=end_dt+timedelta(hours=24)
+            shifts.append({
+                'employee_id':emp['id'],
+                'service_key':f"{date_text}|{service_no}|{vehicle}|{emp['id']}",
+                'work_date':date_text,
+                'activity_summary':route.get('activity_summary') or ' + '.join(route.get('activity_names') or []),
+                'vehicle_code':vehicle,
+                'location_summary':' → '.join(locations),
+                'planned_start':start,
+                'planned_end':end,
+                'planned_end_next_day':end_next,
+                'planned_gross_minutes':gross,
+                'planned_break_minutes':pause,
+                'planned_net_minutes':net,
+                'employee_token':secrets.token_urlsafe(24),
+                'response_deadline':deadline.isoformat(),
+            })
+    return shifts
+
+
+def _send_roster_emails(plan_id, plan_title):
+    rows=db.list_plan_shifts(plan_id)
+    grouped={}
+    for sh in rows:
+        grouped.setdefault(sh['employee_id'],{'name':sh['employee_name'],'email':sh.get('employee_email') or '','rows':[]})['rows'].append(sh)
+    sent=0; missing=[]; failed=[]
+    for info in grouped.values():
+        if not info['email']:
+            missing.append(info['name']); continue
+        lines=[]
+        for sh in info['rows']:
+            lines.append(f"- {sh['work_date']}: {sh['planned_start']}-{sh['planned_end']} · {sh['activity_summary']} · {sh['vehicle_code']} · pauze {sh['planned_break_minutes']} min · betaald {_fmt_minutes(sh['planned_net_minutes'])}")
+        body=(f"Hoi {info['name']},\n\nJe rooster is definitief gemaakt.\n\n" + '\n'.join(lines) +
+              f"\n\nJe persoonlijke rooster: {mail_service.base_url()}/staff\n\nGroet,\nJP Activiteiten")
+        ok,err=mail_service.send_mail(info['email'],f"JP Activiteiten - rooster definitief: {plan_title}",body)
+        if ok: sent+=1
+        else: failed.append(f"{info['name']}: {err}")
+    return sent,missing,failed
+
+
+@app.post('/plans/<int:plan_id>/finalize-roster')
+def finalize_roster(plan_id):
+    try:
+        record=db.get_saved_plan(plan_id)
+        if not record or not record.get('plan_snapshot'):
+            return redirect(url_for('open_saved_plan',plan_id=plan_id))
+        shifts=_plan_to_employee_shifts(plan_id,record['plan_snapshot'])
+        db.replace_plan_shifts(plan_id,shifts)
+        db.set_saved_plan_roster_status(plan_id,'final',finalized=True)
+        sent,missing,failed=_send_roster_emails(plan_id,record.get('title') or f'Planning {plan_id}')
+        message=f'Rooster definitief. {len(shifts)} dienst(en) opgeslagen; {sent} medewerker(s) gemaild.'
+        if missing:
+            message += ' Geen e-mail bij: ' + ', '.join(missing) + '.'
+        if failed:
+            message += ' Mailfout: ' + '; '.join(failed[:3])
+        return redirect(url_for('open_saved_plan',plan_id=plan_id,message=message))
+    except Exception as e:
+        return redirect(url_for('open_saved_plan',plan_id=plan_id,message=f'Definitief maken mislukt: {e}'))
+
+
+@app.post('/plans/<int:plan_id>/reopen-roster')
+def reopen_roster(plan_id):
+    try:
+        db.set_saved_plan_roster_status(plan_id,'reopened',reopened=True)
+        return redirect(url_for('open_saved_plan',plan_id=plan_id,message='Rooster opnieuw geopend. Je kunt planning/personeel aanpassen en daarna opnieuw definitief maken.'))
+    except Exception as e:
+        return redirect(url_for('open_saved_plan',plan_id=plan_id,message=f'Rooster openen mislukt: {e}'))
+
+
+def _staff_employee():
+    employee_id=session.get('staff_employee_id')
+    if not employee_id:
+        return None
+    emp=db.get_employee_by_id(employee_id)
+    if not emp or not emp.get('active') or not emp.get('portal_active'):
+        session.pop('staff_employee_id',None)
+        return None
+    return emp
+
+
+@app.route('/staff/login',methods=['GET','POST'])
+def staff_login():
+    error=None
+    if request.method=='POST':
+        emp=db.get_employee_by_email(request.form.get('email',''))
+        password=request.form.get('password','')
+        if emp and emp.get('portal_active') and emp.get('active') and emp.get('password_hash') and check_password_hash(emp['password_hash'],password):
+            session['staff_employee_id']=emp['id']
+            return redirect(url_for('staff_portal'))
+        error='E-mailadres of wachtwoord klopt niet.'
+    return render_template('staff_login.html',error=error)
+
+
+@app.get('/staff/logout')
+def staff_logout():
+    session.pop('staff_employee_id',None)
+    return redirect(url_for('staff_login'))
+
+
+@app.get('/staff')
+def staff_portal():
+    emp=_staff_employee()
+    if not emp:
+        return redirect(url_for('staff_login'))
+    date_text=(request.args.get('date') or datetime.now(ZoneInfo('Europe/Amsterdam')).date().isoformat()).strip()
+    try:
+        day=datetime.fromisoformat(date_text).date()
+    except Exception:
+        day=datetime.now(ZoneInfo('Europe/Amsterdam')).date(); date_text=day.isoformat()
+    rows=db.list_employee_shifts(emp['id'],date_text,date_text)
+    return render_template('staff_portal.html',employee=emp,shifts=rows,date=date_text,
+                           prev_date=(day-timedelta(days=1)).isoformat(),next_date=(day+timedelta(days=1)).isoformat())
+
+
+@app.route('/staff/hours/<token>',methods=['GET','POST'])
+def staff_hours_token(token):
+    sh=db.get_shift_by_employee_token(token)
+    if not sh:
+        return 'Deze urenlink is niet geldig.',404
+    now=datetime.now(ZoneInfo('Europe/Amsterdam'))
+    deadline=sh.get('response_deadline')
+    if deadline and getattr(deadline,'tzinfo',None) is None:
+        deadline=deadline.replace(tzinfo=ZoneInfo('Europe/Amsterdam'))
+    expired=bool(deadline and now>deadline and sh.get('status') not in {'reopened','pending_planner'})
+    message=None
+    if request.method=='POST':
+        if expired:
+            message='De 24-uursperiode is verlopen. Neem contact op met de planner; die kan de dienst opnieuw openen.'
+        else:
+            mode=request.form.get('mode','confirm')
+            start=(request.form.get('actual_start') or str(sh['planned_start'])[:5]).strip()
+            end=(request.form.get('actual_end') or str(sh['planned_end'])[:5]).strip()
+            end_next=request.form.get('end_next_day')=='on'
+            gross=_time_span_minutes(start,end,end_next)
+            try:
+                brk=max(0,int(request.form.get('break_minutes') or sh['planned_break_minutes'] or 0))
+            except ValueError:
+                brk=int(sh['planned_break_minutes'] or 0)
+            net=max(0,gross-brk)
+            changed=(mode=='adjust' or start!=str(sh['planned_start'])[:5] or end!=str(sh['planned_end'])[:5] or brk!=int(sh['planned_break_minutes'] or 0) or end_next!=bool(sh['planned_end_next_day']))
+            planner_token=secrets.token_urlsafe(24) if changed else ''
+            db.submit_employee_hours(sh['id'],start,end,end_next,brk,gross,net,request.form.get('employee_note',''),changed,planner_token)
+            if changed and mail_service.planner_email():
+                approve=f"{mail_service.base_url()}/hours/approve/{planner_token}"
+                admin=f"{mail_service.base_url()}/personnel/hours?year={sh['work_date'].year}&month={sh['work_date'].month}"
+                body=(f"{sh['employee_name']} heeft uren aangepast voor {sh['work_date']}.\n\n"
+                      f"Systeem: {str(sh['planned_start'])[:5]}-{str(sh['planned_end'])[:5]}, pauze {sh['planned_break_minutes']} min.\n"
+                      f"Aangevraagd: {start}-{end}, pauze {brk} min, betaald {_fmt_minutes(net)}.\n"
+                      f"Reden: {request.form.get('employee_note','')}\n\nDirect accorderen: {approve}\nUrenoverzicht: {admin}")
+                mail_service.send_mail(mail_service.planner_email(),f"Urenwijziging accorderen - {sh['employee_name']} {sh['work_date']}",body)
+            message='Uren zijn aangepast en naar de planner gestuurd.' if changed else 'Uren zijn akkoord gezet.'
+            sh=db.get_shift_by_employee_token(token)
+    return render_template('staff_hours.html',shift=sh,expired=expired,message=message)
+
+
+@app.get('/hours/approve/<token>')
+def approve_hours_email(token):
+    sh=db.get_shift_by_planner_token(token)
+    if not sh:
+        return 'Deze accorderingslink is niet meer geldig.',404
+    db.approve_shift_by_planner(sh['id'],'Via e-maillink geaccordeerd')
+    return render_template('hours_approved.html',shift=sh)
+
+
+@app.get('/personnel/hours')
+def personnel_hours():
+    now=datetime.now(ZoneInfo('Europe/Amsterdam'))
+    try: year=int(request.args.get('year') or now.year)
+    except ValueError: year=now.year
+    try: month=int(request.args.get('month') or now.month)
+    except ValueError: month=now.month
+    month=min(12,max(1,month))
+    rows,totals=db.personnel_hours_month(year,month)
+    for t in totals:
+        t['gross_duration']=_fmt_minutes(t['gross_minutes']); t['break_duration']=_fmt_minutes(t['break_minutes']); t['net_duration']=_fmt_minutes(t['net_minutes'])
+    return render_template('personnel_hours.html',rows=rows,totals=totals,year=year,month=month,message=request.args.get('message'))
+
+
+@app.post('/personnel/hours/<int:shift_id>/reopen')
+def personnel_hours_reopen(shift_id):
+    deadline=datetime.now(ZoneInfo('Europe/Amsterdam'))+timedelta(hours=24)
+    db.reopen_shift(shift_id,deadline.isoformat(),request.form.get('planner_note',''))
+    # Send a fresh reminder if employee has an email.
+    year=request.form.get('year'); month=request.form.get('month')
+    return redirect(url_for('personnel_hours',year=year,month=month,message='Dienst opnieuw geopend voor aanpassing.'))
+
+
+@app.post('/personnel/hours/<int:shift_id>/save')
+def personnel_hours_save(shift_id):
+    start=(request.form.get('actual_start') or '').strip(); end=(request.form.get('actual_end') or '').strip()
+    end_next=request.form.get('end_next_day')=='on'
+    gross=_time_span_minutes(start,end,end_next)
+    brk=max(0,int(request.form.get('break_minutes') or 0)); net=max(0,gross-brk)
+    db.planner_update_shift(shift_id,start,end,end_next,brk,gross,net,request.form.get('planner_note',''),True)
+    return redirect(url_for('personnel_hours',year=request.form.get('year'),month=request.form.get('month'),message='Uren door planner opgeslagen en akkoord gezet.'))
 
 @app.post('/personnel/skill/save')
 def personnel_skill_save():
