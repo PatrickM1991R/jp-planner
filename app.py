@@ -76,16 +76,29 @@ def _personnel_refdata():
     return db.personnel_reference_data()
 
 
-def default_staff(participants):
-    """Default staffing: 1 staff member per started block of 30 participants.
+GAME_SHOW_ALIASES = (
+    'ik hou van holland', 'de alleskunner', 'alleskunner', 'minute to win it',
+    'crazy bingo', 'gekke bingo', 'pubquiz', 'alles mag vandaag',
+)
 
-    1-30 -> 1, 31-60 -> 2, 61-90 -> 3, etc.
-    The value remains manually editable and saved per reservation.
+def _is_game_show(activity):
+    low = ' '.join((activity or '').lower().split())
+    return any(alias in low for alias in GAME_SHOW_ALIASES)
+
+def default_staff(participants, activity=''):
+    """JP staffing rule.
+
+    General activities: 1 per started block of 30 participants.
+    Game shows: second guide starts at 40 instead of 31; after that another
+    guide is added per started block of 30 (1-39=1, 40-69=2, 70-99=3...).
+    Manual saved corrections remain authoritative.
     """
     try:
         count = int(participants or 0)
     except (TypeError, ValueError):
         count = 0
+    if _is_game_show(activity):
+        return 1 if count <= 39 else 2 + max(0, (count - 40) // 30)
     return max(1, (count + 29) // 30)
 
 
@@ -159,7 +172,7 @@ def enrich_rows(rows):
             row['location_edit']=loc_alias.get('location_text') or hint; row['location_source']='database'; row['location']={'status':'saved','query':row['location_edit'],'label':row['location_edit']}
         else: row['location_edit']=hint; row['location_source']='automatic'; row['location']={'status':'needs_review' if hint else 'missing','query':hint,'label':''}
         saved_staff=(ref_fix or {}).get('staff_required') if ref_fix else None
-        row['staff_required']=saved_staff if saved_staff is not None else default_staff(row.get('participants'))
+        row['staff_required']=saved_staff if saved_staff is not None else default_staff(row.get('participants'), row.get('activity'))
         row['staff_source']='manual' if saved_staff is not None else 'rule'
     return rows
 
@@ -274,9 +287,11 @@ def _apply_issue_resolutions(plan, plan_id):
                 job['staff_problem']=False
                 job['staff_warnings']=[w for w in (job.get('staff_warnings') or []) if 'PERSONEELSPROBLEEM' not in str(w).upper()]
             elif issue_type=='logistics':
+                job['logistics_problem']=False
                 if job.get('status')=='unplanned':
                     job['status']='resolved_external_transport'
-                job['warnings']=[w for w in (job.get('warnings') or []) if 'GEEN VOERTUIG' not in str(w).upper()]
+                job['warnings']=[w for w in (job.get('warnings') or [])
+                                 if 'GEEN VOERTUIG' not in str(w).upper() and 'LOGISTIEKPROBLEEM' not in str(w).upper()]
         if solved:
             job['resolved_issues']=solved
             job['issue_resolved']=True
@@ -287,6 +302,7 @@ def _apply_issue_resolutions(plan, plan_id):
     plan['unplanned_count']=len(plan['unplanned_jobs'])
     plan['material_problem_count']=sum(1 for j in all_jobs if j.get('material_problem'))
     plan['staff_problem_count']=sum(1 for j in all_jobs if j.get('staff_problem'))
+    plan['logistics_problem_count']=sum(1 for j in all_jobs if j.get('logistics_problem'))
     plan['resolved_issue_count']=sum(len(j.get('resolved_issues') or []) for j in all_jobs)
     plan['issue_resolutions']=rows
 
@@ -368,6 +384,7 @@ def _jobs_from_form(form):
     overrides={}
     staff_overrides={}
     depot_overrides={}
+    multi_vehicle_overrides={}
     for i in range(count):
         ref=(form.get(f'reference_{i}') or '').strip()
         try:
@@ -376,6 +393,7 @@ def _jobs_from_form(form):
             staff_required=1
         transport_employee=(form.get(f'extra_car_employee_{i}') or '').strip()
         depot_override=(form.get(f'depot_override_{i}') or '').strip()
+        form_key=ref or str(i)
         jobs.append({
             'date':(form.get(f'date_{i}') or '').strip(),
             'start':(form.get(f'start_{i}') or '').strip(),
@@ -387,11 +405,21 @@ def _jobs_from_form(form):
             'activity':(form.get(f'activity_{i}') or '').strip(),
             'location_text':(form.get(f'location_{i}') or '').strip(),
             'reference':ref,
+            'form_key':form_key,
             'transport_employee':transport_employee,
             'depot_override':depot_override,
         })
         ov=(form.get(f'override_{i}') or '').strip()
-        if ov and ref: overrides[ref]=ov
+        if ov:
+            overrides[form_key]=ov
+        extra_codes=[]
+        for code in form.getlist(f'extra_vehicle_{i}'):
+            code=(code or '').strip()
+            if code and code not in extra_codes and code != ov:
+                extra_codes.append(code)
+        all_codes=([ov] if ov else []) + extra_codes
+        if all_codes:
+            multi_vehicle_overrides[form_key]=all_codes
         manual_names=[]
         for n in range(staff_required):
             name=(form.get(f'staff_person_{i}_{n}') or '').strip()
@@ -404,19 +432,19 @@ def _jobs_from_form(form):
             if transport_employee not in manual_names:
                 manual_names.insert(0, transport_employee)
         if manual_names:
-            staff_overrides[ref or str(i)] = manual_names
+            staff_overrides[form_key] = manual_names
         if depot_override:
-            depot_overrides[ref or str(i)] = depot_override
-    return jobs,overrides,staff_overrides,depot_overrides
+            depot_overrides[form_key] = depot_override
+    return jobs,overrides,staff_overrides,depot_overrides,multi_vehicle_overrides
 
 @app.post('/generate-logistics')
 def generate_logistics():
     try:
-        jobs,overrides,staff_overrides,depot_overrides=_jobs_from_form(request.form)
+        jobs,overrides,staff_overrides,depot_overrides,multi_vehicle_overrides=_jobs_from_form(request.form)
         if not jobs:
             return render_home(error='Geen opdrachten ontvangen voor de planning.')
         depots,vehicles,stock,resources,vehicle_materials=db.get_logistics()
-        plan=build_logistics_plan(jobs,depots,vehicles,stock,resources,vehicle_materials,overrides,depot_overrides)
+        plan=build_logistics_plan(jobs,depots,vehicles,stock,resources,vehicle_materials,overrides,depot_overrides,multi_vehicle_overrides)
         employees,_=db.get_personnel() if db.configured() else ([],None)
         plan=assign_staff_to_plan(plan,employees,staff_overrides) if employees else plan
         plan.setdefault('employees',employees)
@@ -560,6 +588,7 @@ def personnel_add():
             request.form.get('driving_license','Onbekend'),
             request.form.get('own_transport','Onbekend'),
             request.form.get('notes',''),
+            request.form.get('level',''),
         )
         return redirect(url_for('personnel',message='Nieuwe medewerker toegevoegd.'))
     except Exception as e:
@@ -587,6 +616,7 @@ def personnel_save():
             own_transport=request.form.get('own_transport','Onbekend'),
             active=request.form.get('active')=='on',
             notes=request.form.get('notes',''),
+            level=request.form.get('level',''),
             enabled_week_modes=enabled,
             availability_by_mode=availability,
             skills=skills,

@@ -38,6 +38,32 @@ ACTIVITY_RESOURCE_ALIASES = [
 
 
 
+POLO_FORBIDDEN_RESOURCES = {'HIGHLAND_GAMES','CASINO','WESTERN_GAMES','BOOGSCHIETEN','EXPEDITIE_ROBINSON'}
+RUSH_WINDOWS = ((7, 0, 9, 0), (16, 0, 18, 30))
+RUSH_NODE_SURCHARGE_MINUTES = 10
+
+def _is_vw_polo(code):
+    low = _norm(code)
+    return 'vw polo' in low or 'volkswagen polo' in low
+
+def _vehicle_allowed_for_resource(vehicle_code, resource_code):
+    return not (_is_vw_polo(vehicle_code) and resource_code in POLO_FORBIDDEN_RESOURCES)
+
+def _in_rush(dt):
+    minute = dt.hour * 60 + dt.minute
+    return (7*60 <= minute < 9*60) or (16*60 <= minute < 18*60+30)
+
+def _rush_adjust(base_minutes, arrival_dt):
+    """Add JP rush allowance for a route leg ending in a rush window.
+
+    A planner route transition is treated as one route node (knooppunt).
+    Each such node adds 10 minutes in the agreed rush windows.
+    """
+    if base_minutes is None:
+        return None, 0
+    surcharge = RUSH_NODE_SURCHARGE_MINUTES if _in_rush(arrival_dt) else 0
+    return base_minutes + surcharge, surcharge
+
 def _norm(text):
     return ' '.join((text or '').lower().split())
 
@@ -123,7 +149,7 @@ def _resolve_many(texts):
 
 
 def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_materials=None,
-                         overrides=None, depot_overrides=None):
+                         overrides=None, depot_overrides=None, multi_vehicle_overrides=None):
     """Build services using editable vehicle material and depot stock data.
 
     v10 rules:
@@ -134,6 +160,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
     """
     overrides = overrides or {}
     depot_overrides = depot_overrides or {}
+    multi_vehicle_overrides = multi_vehicle_overrides or {}
     vehicle_materials = vehicle_materials or []
 
     active_vehicles = [dict(v) for v in vehicles if v.get('active')]
@@ -212,7 +239,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
         if key not in states:
             states[key] = {
                 'vehicle': template['vehicle'], 'depot': depot, 'date': date_text,
-                'location': depot['address'], 'available_at': None, 'jobs': [],
+                'location': depot['address'], 'location_label': depot['name'], 'available_at': None, 'jobs': [],
             }
         return states[key]
 
@@ -263,6 +290,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
 
     for job in sorted_jobs:
         ref = str(job.get('reference') or '')
+        job_key = str(job.get('reference') or job.get('form_key') or '')
         start_dt = _dt(job['date'], job['start'])
         end_dt = _dt(job['date'], job['end'])
         setup_minutes = max(0, int(job.get('setup_minutes', 30) or 0))
@@ -274,8 +302,8 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
         resource_code = _resource_code(activity)
         resource_name = (resource_map.get(resource_code) or {}).get('resource_name') or activity
         location = job.get('location_text', '')
-        override = overrides.get(ref)
-        forced_depot_code = depot_overrides.get(ref) or job.get('depot_override') or ''
+        override = overrides.get(job_key)
+        forced_depot_code = depot_overrides.get(job_key) or job.get('depot_override') or ''
 
         location_result = resolved.get(location, {})
         if not location or location_result.get('lat') is None or location_result.get('lon') is None:
@@ -285,7 +313,8 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
                               'available_time': available_after.strftime('%H:%M'), 'status': 'location_problem',
                               'warnings': [reason], 'material_problem': False, 'location_problem': True,
                               'pickup_material_required': False, 'pickup_material_label': '',
-                              'depot_override': forced_depot_code})
+                              'depot_override': forced_depot_code, 'vehicle_codes': ([override] if override else []),
+                              'vehicle_travel_legs': []})
             warnings.append(f"Ref. {ref or '?'}: {reason}")
             continue
 
@@ -294,12 +323,16 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
         material_snapshots = []
         if not _is_flexible_transport(override):
             for code in vehicle_templates:
+                if not _vehicle_allowed_for_resource(code, resource_code):
+                    continue
                 if override and code != override:
                     continue
                 state = day_state(code, job['date'], forced_depot_code)
                 mins, km = travel(state['location'], location)
                 if mins is None:
                     continue
+                rush_reference = state['available_at'] if state['available_at'] is not None else required_arrival
+                mins, rush_extra = _rush_adjust(mins, rush_reference)
                 if state['available_at'] is not None:
                     arrival = state['available_at'] + timedelta(minutes=mins)
                     if arrival > required_arrival:
@@ -308,7 +341,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
                 material_snapshots.append((state['depot'], mat))
                 if not mat['enough']:
                     continue
-                fixed_candidates.append((km, mins, code, state, mat))
+                fixed_candidates.append((km, mins, code, state, mat, state.get('location'), state.get('location_label')))
 
         chosen_kind = None
         chosen = None
@@ -348,6 +381,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
                     mins, km = travel(depot['address'], location)
                     if mins is None:
                         continue
+                    mins, rush_extra = _rush_adjust(mins, required_arrival)
                     departure = required_arrival - timedelta(minutes=mins)
                     flex_candidates.append((priority, km, mins, code, depot, mat, departure, flex_kind))
             if flex_candidates:
@@ -387,7 +421,8 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
                               'available_time': available_after.strftime('%H:%M'), 'status': status,
                               'warnings': [reason], 'material_problem': material_problem, 'location_problem': False,
                               'pickup_material_required': False, 'pickup_material_label': resource_name if resource_code else '',
-                              'depot_override': forced_depot_code})
+                              'depot_override': forced_depot_code, 'vehicle_codes': ([override] if override else []),
+                              'vehicle_travel_legs': []})
             warnings.append(f"Ref. {ref or '?'}: {reason}")
             continue
 
@@ -412,9 +447,15 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
                      'pickup_depot_name': depot['name'], 'pickup_depot_address': depot['address'],
                      'sets_from_stock': mat['required_sets'],
                      'pickup_material_required': bool(resource_code and mat['required_sets'] > 0),
-                     'pickup_material_label': resource_name if resource_code else '', 'depot_override': depot['code']}
+                     'pickup_material_label': resource_name if resource_code else '', 'depot_override': depot['code'],
+                     'travel_from_address': depot['address'], 'travel_from_label': depot['name'],
+                     'vehicle_codes': [code], 'vehicle_travel_legs': []}
             plan_jobs.append(entry)
             ret_min, ret_km = travel(location, depot['address'])
+            if ret_min is not None:
+                ret_min, return_rush_extra = _rush_adjust(ret_min, available_after)
+            else:
+                return_rush_extra = 0
             route_min = mins + (ret_min or 0)
             route_km = km + (ret_km or 0)
             return_dt = available_after + timedelta(minutes=ret_min) if ret_min is not None else None
@@ -430,7 +471,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
             })
             continue
 
-        km, mins, code, state, mat = chosen
+        km, mins, code, state, mat, travel_from_address, travel_from_label = chosen
         departure = required_arrival - timedelta(minutes=mins) if state['available_at'] is None else state['available_at']
         if resource_code and mat['required_sets'] > 0:
             reserve_stock(state['depot']['code'], resource_code, required_arrival, available_after, mat['required_sets'])
@@ -448,11 +489,134 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
                  'pickup_material_required': bool(resource_code and mat['required_sets'] > 0),
                  'pickup_material_label': resource_name if resource_code else '',
                  'pickup_depot_name': state['depot']['name'], 'pickup_depot_address': state['depot']['address'],
-                 'depot_override': state['depot']['code']}
+                 'depot_override': state['depot']['code'],
+                 'travel_from_address': travel_from_address, 'travel_from_label': travel_from_label,
+                 'vehicle_codes': [code], 'vehicle_travel_legs': []}
         plan_jobs.append(entry)
         state['jobs'].append(entry)
         state['location'] = location
+        state['location_label'] = f"{activity} · {location}"
         state['available_at'] = available_after
+
+    # v12.4: multiple vehicles may be attached to one assignment.
+    # Rebuild the travel chain per selected vehicle so the route source is explicit:
+    # depot -> first booking -> next booking -> ... . This also works when the same
+    # vehicle is primary on one job and an extra vehicle on the next job.
+    selectable_map = {str(v.get('code')): dict(v) for v in selectable_vehicles}
+
+    # First determine all selected vehicles for every job.
+    for item in plan_jobs:
+        key = str(item.get('reference') or item.get('form_key') or '')
+        primary = str(item.get('vehicle_code') or '')
+        requested = list(multi_vehicle_overrides.get(key) or [])
+        codes = []
+        if primary:
+            codes.append(primary)
+        for code in requested:
+            code = str(code or '').strip()
+            if code and code not in codes:
+                codes.append(code)
+        item['vehicle_codes'] = codes
+        item['vehicle_travel_legs'] = []
+        item.setdefault('logistics_problem', False)
+
+    assignments = {}
+    for item in plan_jobs:
+        for code in item.get('vehicle_codes') or []:
+            assignments.setdefault(code, []).append(item)
+
+    for code, assigned_jobs in assignments.items():
+        vehicle = selectable_map.get(code) or {}
+        default_depot_code = vehicle.get('depot_code') or ''
+        # State is kept separately per date and chosen service depot.
+        route_states = {}
+        for item in sorted(assigned_jobs, key=lambda j: (_dt(j['date'], j['start']), str(j.get('reference') or j.get('form_key') or ''))):
+            item_resource_code = _resource_code(item.get('activity',''))
+            if not _vehicle_allowed_for_resource(code, item_resource_code):
+                msg = f"❗ LOGISTIEKPROBLEEM: {code} mag niet worden ingezet voor {item.get('activity') or 'deze activiteit'}."
+                item.setdefault('warnings', []).append(msg)
+                item['logistics_problem'] = True
+                item['vehicle_travel_legs'].append({
+                    'vehicle_code': code, 'from_label': 'Niet toegestaan', 'from_address': '',
+                    'to_label': item.get('activity') or '', 'to_address': item.get('location_text') or '',
+                    'travel_minutes': None, 'rush_extra_minutes': 0, 'travel_km': None, 'departure_time': '',
+                    'feasible': False, 'primary': code == item.get('vehicle_code'),
+                })
+                continue
+            forced_depot_code = item.get('depot_override') or ''
+            depot = depot_map.get(forced_depot_code) if forced_depot_code else depot_map.get(default_depot_code)
+            if not depot:
+                msg = f"❗ LOGISTIEKPROBLEEM: vertrekstandplaats voor voertuig {code} is niet bekend."
+                item.setdefault('warnings', []).append(msg)
+                item['logistics_problem'] = True
+                item['vehicle_travel_legs'].append({
+                    'vehicle_code': code, 'from_label': 'Vertrekpunt onbekend', 'from_address': '',
+                    'to_label': item.get('activity') or '', 'to_address': item.get('location_text') or '',
+                    'travel_minutes': None, 'travel_km': None, 'departure_time': '',
+                    'feasible': False, 'primary': code == item.get('vehicle_code'),
+                })
+                continue
+
+            state_key = (item['date'], depot['code'])
+            state = route_states.setdefault(state_key, {
+                'location': depot['address'],
+                'location_label': depot['name'],
+                'available_at': None,
+            })
+
+            mins, km = travel(state['location'], item.get('location_text') or '')
+            start_dt = _dt(item['date'], item['start'])
+            setup_minutes = max(0, int(item.get('setup_minutes', 30) or 0))
+            cleanup_minutes = max(0, int(item.get('cleanup_minutes', 30) or 0))
+            required_arrival = start_dt - timedelta(minutes=setup_minutes)
+            available_after = _dt(item['date'], item['end']) + timedelta(minutes=cleanup_minutes)
+            rush_reference = state['available_at'] if state['available_at'] is not None else required_arrival
+            if mins is not None:
+                mins, rush_extra = _rush_adjust(mins, rush_reference)
+            else:
+                rush_extra = 0
+            feasible = mins is not None
+            departure_dt = None
+            if mins is not None:
+                departure_dt = required_arrival - timedelta(minutes=mins) if state['available_at'] is None else state['available_at']
+                if state['available_at'] is not None and state['available_at'] + timedelta(minutes=mins) > required_arrival:
+                    feasible = False
+
+            leg = {
+                'vehicle_code': code,
+                'from_label': state['location_label'],
+                'from_address': state['location'],
+                'to_label': item.get('activity') or item.get('location_text') or '',
+                'to_address': item.get('location_text') or '',
+                'travel_minutes': round(mins) if mins is not None else None,
+                'rush_extra_minutes': rush_extra,
+                'travel_km': round(km, 1) if km is not None else None,
+                'departure_time': departure_dt.strftime('%H:%M') if departure_dt else '',
+                'feasible': feasible,
+                'primary': code == item.get('vehicle_code'),
+            }
+            item['vehicle_travel_legs'].append(leg)
+
+            if leg['primary']:
+                item['travel_from_address'] = leg['from_address']
+                item['travel_from_label'] = leg['from_label']
+                if leg['travel_minutes'] is not None:
+                    item['travel_minutes'] = leg['travel_minutes']
+                    item['travel_km'] = leg['travel_km']
+                    item['departure_time'] = leg['departure_time']
+
+            if not feasible:
+                msg = (f"❗ LOGISTIEKPROBLEEM: {code} kan niet op tijd van "
+                       f"{state['location_label']} naar {item.get('location_text') or 'de boeking'}.")
+                if msg not in item.setdefault('warnings', []):
+                    item['warnings'].append(msg)
+                item['logistics_problem'] = True
+
+            # Keep the manual assignment even when infeasible. The red problem remains
+            # visible and can be acknowledged using the manual resolution workflow.
+            state['location'] = item.get('location_text') or state['location']
+            state['location_label'] = f"{item.get('activity') or 'Boeking'} · {item.get('location_text') or ''}"
+            state['available_at'] = available_after
 
     for form_index, item in enumerate(plan_jobs):
         item['form_index'] = form_index
@@ -464,6 +628,11 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
         if not state['jobs']:
             continue
         route_jobs = state['jobs']
+        route_vehicle_codes = []
+        for route_job in route_jobs:
+            for vc in route_job.get('vehicle_codes') or ([route_job.get('vehicle_code')] if route_job.get('vehicle_code') else []):
+                if vc and vc not in route_vehicle_codes:
+                    route_vehicle_codes.append(vc)
         route_km = sum(float(j.get('travel_km') or 0) for j in route_jobs)
         route_min = sum(float(j.get('travel_minutes') or 0) for j in route_jobs)
         first, last = route_jobs[0], route_jobs[-1]
@@ -473,6 +642,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
         last_available_dt = _dt(last['date'], last['end']) + timedelta(minutes=int(last.get('cleanup_minutes', 30) or 0))
         return_dt = None
         if ret_min is not None:
+            ret_min, return_rush_extra = _rush_adjust(ret_min, last_available_dt)
             route_min += ret_min
             route_km += ret_km or 0
             return_dt = last_available_dt + timedelta(minutes=ret_min)
@@ -488,7 +658,7 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
             'jobs': route_jobs, 'job_count': len(route_jobs), 'distance_km': round(route_km, 1),
             'drive_minutes': round(route_min), 'first_departure': duty_start_dt.strftime('%H:%M'),
             'return_time': return_text, 'duty_minutes': duty_minutes, 'duty_duration': _format_minutes(duty_minutes),
-            'own_transport': False,
+            'own_transport': False, 'vehicle_codes': route_vehicle_codes,
         })
 
     for route in flexible_routes:
@@ -513,5 +683,6 @@ def build_logistics_plan(jobs, depots, vehicles, stock, resources, vehicle_mater
         'unplanned_count': sum(1 for j in plan_jobs if j.get('status') in {'unplanned', 'material_problem', 'location_problem'}),
         'material_problem_count': sum(1 for j in plan_jobs if j.get('material_problem')),
         'location_problem_count': sum(1 for j in plan_jobs if j.get('location_problem')),
+        'logistics_problem_count': sum(1 for j in plan_jobs if j.get('logistics_problem')),
         'resolved_location_count': sum(1 for t in node_texts if resolved.get(t, {}).get('lat') is not None),
     }

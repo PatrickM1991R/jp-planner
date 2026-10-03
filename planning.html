@@ -292,6 +292,8 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 
 
 .issue-action-box{margin-top:8px;padding:10px;border-radius:10px;border:2px solid #ef4444;background:#fff7f7}.issue-action-box strong{color:#991b1b}.issue-buttons{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.issue-buttons button{font-size:11px;padding:8px 10px}.issue-resolved{margin-top:7px;padding:9px 10px;border-radius:10px;background:#edf9f1;border:1px solid #bfe3ca;color:#166534}.issue-resolved button{background:#fff;color:#166534;border:1px solid #bfe3ca;box-shadow:none}.resolve-material{background:#c9a227}.resolve-logistics{background:#2563eb}.resolve-personnel{background:#7c3aed}
+
+.multi-vehicles{margin-top:6px;padding:10px;border:1px solid var(--jp-border,#ebe4f2);border-radius:12px;background:#fbf9fd}.vehicle-row{display:flex;gap:7px;align-items:center;margin-top:7px}.vehicle-row select{flex:1;max-width:none}.vehicle-row button{padding:7px 10px;background:#fff;color:#8b1d1d;border:1px solid #f2c7c7;box-shadow:none}.add-vehicle-btn{margin-top:8px;background:#140821!important}.travel-leg{margin-top:7px;padding:8px 9px;border-radius:10px;background:#f7f4fb;border:1px solid #ebe4f2;font-size:11px;line-height:1.45}.travel-leg.bad-leg{background:#fff0f0;border-color:#f2c7c7;color:#8b1d1d}.travel-arrow{color:#c9a227;font-weight:900}.vehicle-summary{margin-top:5px;font-size:11px;color:#4d4658}.service-vehicles{font-size:12px;color:#4d4658;margin-top:4px}
 </style>
 </head>
 <body>
@@ -299,7 +301,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 <div class="card">
   <div class="topline">
     <div>
-      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v12.3 · handmatige probleemoplossing</span></h1>
+      <h1>Dienstenplanning & routes <span style="font-size:12px;background:#dcfce7;color:#166534;padding:5px 8px;border-radius:999px;vertical-align:middle">Planbord v12.5 · niveaus + spelshowstaffing + spits</span></h1>
       <p><a href="/">← Terug naar opdrachten</a> · <a href="/fleet">Wagenpark beheren</a> · <a href="/personnel">Personeel beheren</a></p>
       <p class="muted">Iedere kaart hieronder is één dienst: standplaats → gekoppelde klussen → terug naar standplaats. Wachttijd tussen klussen telt mee in de dienstduur. Smart Event Manager blijft leidend voor spelstart en speleinde.</p>
     </div>
@@ -385,20 +387,36 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
         <div class="small">Ref. {{j.reference}}</div>
       </div>
       <div>
-        <div class="small">Bus / vervoer handmatig</div>
-        <select name="override_{{i}}">
-          <option value="">Automatisch</option>
-          {% for v in plan.vehicles %}<option value="{{v.code}}" {% if j.vehicle_code==v.code %}selected{% endif %}>{{v.code}}</option>{% endfor %}
-        </select>
+        <div class="small">Voertuigen voor deze opdracht</div>
+        <div class="multi-vehicles">
+          <label class="small"><strong>Hoofdvoertuig</strong></label>
+          <select name="override_{{i}}" data-primary-vehicle="{{i}}">
+            <option value="">Automatisch</option>
+            {% for v in plan.vehicles %}<option value="{{v.code}}" {% if j.vehicle_code==v.code %}selected{% endif %}>{{v.code}}</option>{% endfor %}
+          </select>
+          <div data-extra-vehicles="{{i}}">
+            {% for vc in (j.vehicle_codes or [])[1:] %}
+            <div class="vehicle-row">
+              <select name="extra_vehicle_{{i}}">
+                <option value="">Kies extra voertuig</option>
+                {% for v in plan.vehicles %}<option value="{{v.code}}" {% if vc==v.code %}selected{% endif %}>{{v.code}}</option>{% endfor %}
+              </select>
+              <button type="button" data-remove-vehicle>Verwijderen</button>
+            </div>
+            {% endfor %}
+          </div>
+          <button type="button" class="add-vehicle-btn" data-add-vehicle="{{i}}">+ Voertuig toevoegen</button>
+          {% if j.vehicle_codes and j.vehicle_codes|length > 1 %}<div class="vehicle-summary"><strong>{{j.vehicle_codes|length}} voertuigen:</strong> {{j.vehicle_codes|join(' · ')}}</div>{% endif %}
+        </div>
         <div class="extra-transport-person" data-extra-employee-wrap="{{i}}">
           <label>Welke medewerker stelt de extra auto beschikbaar?</label>
           <select name="extra_car_employee_{{i}}" data-extra-employee="{{i}}">
             <option value="">Kies medewerker</option>
             {% for e in plan.employees %}<option value="{{e.name}}" {% if j.transport_employee==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}
           </select>
-          <div class="transport-help">Alleen nodig bij <strong>Extra auto medewerker</strong>. JP Planner koppelt deze collega dan direct aan de klus en controleert beschikbaarheid, vaardigheden en Eigen vervoer.</div>
+          <div class="transport-help">Alleen nodig wanneer het hoofdvoertuig Extra auto medewerker is.</div>
         </div>
-        <div class="manual-note small">Je kunt ook een <strong>Extra huurauto</strong> of <strong>Extra auto medewerker</strong> kiezen. De plaats achter de keuze is de voorraad-/vertrekbasis. Herberekenen controleert daarna route, materiaal en personeel opnieuw.</div>
+        <div class="manual-note small">Je kunt meerdere voertuigen aan dezelfde opdracht koppelen. JP Planner controleert voor ieder toegevoegd voertuig waar het vandaan komt en of het op tijd bij deze boeking kan zijn.</div>
       </div>
       <div>
         <div class="small">Bezetting</div>
@@ -418,18 +436,31 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
       <div>
         <div class="small">Rit naar deze klus</div>
         <h3>{{j.departure_time}} vertrek</h3>
-        {% if j.travel_km is not none %}<div>{{j.travel_km}} km · {{j.travel_minutes}} min</div>{% else %}<div>—</div>{% endif %}
+        {% if j.vehicle_travel_legs %}
+          {% for leg in j.vehicle_travel_legs %}
+          <div class="travel-leg {% if not leg.feasible %}bad-leg{% endif %}">
+            <strong>{{leg.vehicle_code}}</strong><br>
+            {{leg.from_label or leg.from_address or 'Vertrekpunt onbekend'}}
+            <span class="travel-arrow">→</span> {{j.location_text}}<br>
+            {% if leg.travel_km is not none %}{{leg.travel_km}} km · {{leg.travel_minutes}} min{% if leg.rush_extra_minutes %} · incl. +{{leg.rush_extra_minutes}} min spits{% endif %}{% else %}route niet berekend{% endif %}
+            {% if not leg.feasible %}<br><strong>❗ Niet op tijd haalbaar</strong>{% endif %}
+          </div>
+          {% endfor %}
+        {% elif j.travel_km is not none %}
+          <div>{{j.travel_from_label or 'Vertrekpunt'}} → {{j.location_text}}</div>
+          <div>{{j.travel_km}} km · {{j.travel_minutes}} min</div>
+        {% else %}<div>—</div>{% endif %}
         {% if j.status=='planned_own_transport' %}<div class="ok">Eigen vervoer + voorraadset</div>{% elif j.status=='planned_rental_car' %}<div class="ok">Extra huurauto ingepland</div>{% elif j.status=='planned_employee_car' %}<div class="ok">Extra auto medewerker ingepland{% if j.transport_employee %}: {{j.transport_employee}}{% endif %}</div>{% endif %}
         {% for w in j.warnings %}<div class="warn">{{w}}</div>{% endfor %}
 
         {% set issue_key = j.reference or ('idx:' ~ j.form_index) %}
-        {% if j.material_problem or j.staff_problem or j.status == 'unplanned' %}
+        {% if j.material_problem or j.staff_problem or j.status == 'unplanned' or j.logistics_problem %}
         <div class="issue-action-box">
           <strong>❗ Groot planningsprobleem</strong>
           <div class="small">Los het operationeel op en bevestig dit hieronder. Daarna ziet JP Planner dit niet meer als blokkerend probleem.</div>
           <div class="issue-buttons">
             {% if j.material_problem %}<button class="resolve-material" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|material">✓ Extra materiaal geregeld</button>{% endif %}
-            {% if j.status == 'unplanned' %}<button class="resolve-logistics" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|logistics">✓ Externe auto / vervoer geregeld</button>{% endif %}
+            {% if j.status == 'unplanned' or j.logistics_problem %}<button class="resolve-logistics" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|logistics">✓ Externe auto / vervoer geregeld</button>{% endif %}
             {% if j.staff_problem %}<button class="resolve-personnel" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|personnel">✓ Externe medewerker geregeld</button>{% endif %}
           </div>
         </div>
@@ -466,7 +497,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
       <div><div class="small">Datum / tijd</div><h3>{{j.date}}</h3><div class="game-time-badge">Spel: {{j.start}}–{{j.end}}</div><div>{{j.arrival_time}} aanwezig</div></div>
       <div><div class="small">Werkblok</div><div class="fieldline"><label>Opbouw</label><input type="number" min="0" name="setup_{{i}}" value="{{j.setup_minutes}}"> min</div><div class="fieldline"><label>Opruimen</label><input type="number" min="0" name="cleanup_{{i}}" value="{{j.cleanup_minutes}}"> min</div><input type="hidden" name="start_{{i}}" value="{{j.start}}"><input type="hidden" name="end_{{i}}" value="{{j.end}}"></div>
       <div><div class="small">Klus</div><h3>{{j.activity}}</h3><div>{{j.location_text}}</div><div class="small">Ref. {{j.reference}}</div></div>
-      <div><div class="small">Bus / vervoer handmatig</div><select name="override_{{i}}"><option value="">Automatisch</option>{% for v in plan.vehicles %}<option value="{{v.code}}" {% if j.vehicle_code==v.code %}selected{% endif %}>{{v.code}}</option>{% endfor %}</select><div class="extra-transport-person" data-extra-employee-wrap="{{i}}"><label>Welke medewerker stelt de extra auto beschikbaar?</label><select name="extra_car_employee_{{i}}" data-extra-employee="{{i}}"><option value="">Kies medewerker</option>{% for e in plan.employees %}<option value="{{e.name}}" {% if j.transport_employee==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}</select><div class="transport-help">Alleen nodig bij Extra auto medewerker.</div></div></div>
+      <div><div class="small">Voertuigen voor deze opdracht</div><div class="multi-vehicles"><label class="small"><strong>Hoofdvoertuig</strong></label><select name="override_{{i}}" data-primary-vehicle="{{i}}"><option value="">Automatisch</option>{% for v in plan.vehicles %}<option value="{{v.code}}" {% if j.vehicle_code==v.code %}selected{% endif %}>{{v.code}}</option>{% endfor %}</select><div data-extra-vehicles="{{i}}">{% for vc in (j.vehicle_codes or [])[1:] %}<div class="vehicle-row"><select name="extra_vehicle_{{i}}"><option value="">Kies extra voertuig</option>{% for v in plan.vehicles %}<option value="{{v.code}}" {% if vc==v.code %}selected{% endif %}>{{v.code}}</option>{% endfor %}</select><button type="button" data-remove-vehicle>Verwijderen</button></div>{% endfor %}</div><button type="button" class="add-vehicle-btn" data-add-vehicle="{{i}}">+ Voertuig toevoegen</button></div><div class="extra-transport-person" data-extra-employee-wrap="{{i}}"><label>Welke medewerker stelt de extra auto beschikbaar?</label><select name="extra_car_employee_{{i}}" data-extra-employee="{{i}}"><option value="">Kies medewerker</option>{% for e in plan.employees %}<option value="{{e.name}}" {% if j.transport_employee==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}</select><div class="transport-help">Alleen nodig bij Extra auto medewerker.</div></div></div>
       <div><div class="small">Bezetting</div><h3>{{j.participants}} pers.</h3><div class="fieldline"><label>Aantal</label><input type="number" min="1" name="staff_{{i}}" value="{{j.staff_required}}"></div>{% if plan.employees %}{% for n in range(j.staff_required) %}<div class="fieldline"><label>Med. {{n+1}}</label><select name="staff_person_{{i}}_{{n}}"><option value="">Automatisch kiezen</option>{% for e in plan.employees %}<option value="{{e.name}}" {% if j.staff_names and n < j.staff_names|length and j.staff_names[n]==e.name %}selected{% endif %}>{{e.name}}</option>{% endfor %}</select></div>{% endfor %}{% if j.staff_names %}<div class="small"><strong>Collega('s):</strong> {{j.staff_names|join(', ')}}</div>{% endif %}{% for w in j.staff_warnings %}<div class="warn">{{w}}</div>{% endfor %}{% else %}<div class="warn">Nog geen personeel geïmporteerd.</div>{% endif %}</div>
       <div>
         {% set issue_key = j.reference or ('idx:' ~ j.form_index) %}
@@ -474,12 +505,12 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
         {% if j.staff_problem %}<div class="bad"><strong>❗ PERSONEELSPROBLEEM</strong></div>{% endif %}
         {% for w in j.warnings %}<div class="warn">{{w}}</div>{% endfor %}
         {% for w in j.staff_warnings %}<div class="warn">{{w}}</div>{% endfor %}
-        {% if j.material_problem or j.staff_problem or j.status == 'unplanned' %}
+        {% if j.material_problem or j.staff_problem or j.status == 'unplanned' or j.logistics_problem %}
         <div class="issue-action-box">
           <strong>Handmatig oplossen</strong>
           <div class="issue-buttons">
             {% if j.material_problem %}<button class="resolve-material" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|material">✓ Extra materiaal geregeld</button>{% endif %}
-            {% if j.status == 'unplanned' %}<button class="resolve-logistics" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|logistics">✓ Externe auto / vervoer geregeld</button>{% endif %}
+            {% if j.status == 'unplanned' or j.logistics_problem %}<button class="resolve-logistics" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|logistics">✓ Externe auto / vervoer geregeld</button>{% endif %}
             {% if j.staff_problem %}<button class="resolve-personnel" type="submit" formaction="/planning/resolve-issue" formmethod="post" name="issue_resolution" value="{{issue_key}}|personnel">✓ Externe medewerker geregeld</button>{% endif %}
           </div>
         </div>
@@ -552,7 +583,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
         <div class="jp92-track" data-service-row="{{r.date}}|{{r.service_number}}|{{r.vehicle_code}}">
           {% for j in r.jobs %}
             {% set block_class = 'pb-ok' %}
-            {% if j.material_problem or j.staff_problem or j.status in ['unplanned','not_planned'] %}
+            {% if j.material_problem or j.staff_problem or j.logistics_problem or j.status in ['unplanned','not_planned'] %}
               {% set block_class = 'pb-bad' %}
             {% elif j.warnings or j.staff_warnings %}
               {% set block_class = 'pb-warn' %}
@@ -630,7 +661,7 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
               {% set svc = namespace(key='', label='') %}
               {% for rr in plan.vehicle_routes %}{% for sj in rr.jobs %}{% if sj.form_index == j.form_index %}{% set svc.key = rr.date ~ '|' ~ rr.service_number ~ '|' ~ rr.vehicle_code %}{% set svc.label = 'Dienst ' ~ rr.service_number ~ ' · ' ~ rr.vehicle_code ~ ((' · ' ~ (rr.staff_names|join(', '))) if rr.staff_names else '') %}{% endif %}{% endfor %}{% endfor %}
               {% set block_class = 'pb-ok' %}
-              {% if j.material_problem or j.staff_problem or j.status in ['unplanned','not_planned'] %}
+              {% if j.material_problem or j.staff_problem or j.logistics_problem or j.status in ['unplanned','not_planned'] %}
                 {% set block_class = 'pb-bad' %}
               {% elif j.warnings or j.staff_warnings %}
                 {% set block_class = 'pb-warn' %}
@@ -806,6 +837,26 @@ input[type=time]:focus,input[type=number]:focus,select:focus{
 
 <script>
 (function(){
+  function addVehicleRow(idx, value){
+    var holder=document.querySelector('[data-extra-vehicles="'+idx+'"]');
+    var primary=document.querySelector('select[name="override_'+idx+'"]');
+    if(!holder || !primary) return;
+    var row=document.createElement('div'); row.className='vehicle-row';
+    var sel=primary.cloneNode(true);
+    sel.name='extra_vehicle_'+idx; sel.removeAttribute('data-primary-vehicle');
+    Array.from(sel.options).forEach(function(o){o.selected=false;});
+    if(sel.options.length){sel.options[0].textContent='Kies extra voertuig'; sel.selectedIndex=0;}
+    if(value) sel.value=value;
+    var remove=document.createElement('button'); remove.type='button'; remove.textContent='Verwijderen'; remove.setAttribute('data-remove-vehicle','');
+    row.appendChild(sel); row.appendChild(remove); holder.appendChild(row);
+  }
+  document.addEventListener('click', function(e){
+    var add=e.target.closest('[data-add-vehicle]');
+    if(add){addVehicleRow(add.getAttribute('data-add-vehicle'),''); return;}
+    var rem=e.target.closest('[data-remove-vehicle]');
+    if(rem){var row=rem.closest('.vehicle-row'); if(row) row.remove();}
+  });
+
   function refreshExtraTransport(){
     document.querySelectorAll('select[name^="override_"]').forEach(function(sel){
       var idx=sel.name.replace('override_','');

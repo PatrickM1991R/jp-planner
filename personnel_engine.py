@@ -96,6 +96,28 @@ def _skill_yes(employee, activity):
     return True
 
 
+def _employee_level(employee):
+    value = employee.get('level')
+    try:
+        return int(value) if value is not None and str(value).strip() != '' else None
+    except (TypeError, ValueError):
+        return None
+
+def _level_qualifies(employee, participants):
+    """Whether an employee may count as an independent guide for this group size."""
+    level = _employee_level(employee)
+    if level is None or level < 2:
+        return False
+    try:
+        pax = int(participants or 0)
+    except (TypeError, ValueError):
+        pax = 0
+    if pax >= 50:
+        return level >= 4
+    if pax > 30:
+        return level >= 3
+    return level >= 2
+
 def _is_yes(value):
     return _norm(value) in {'ja','yes','j','1','true','automaat'}
 
@@ -159,6 +181,10 @@ def assign_staff_to_plan(plan, employees, manual_overrides=None):
                     continue
                 if not _skill_yes(employee, job.get('activity','')):
                     job_warnings.append(f"⚠️ {employee['name']} heeft het spel {job.get('activity')} niet als vaardigheid Ja staan.")
+                if not _level_qualifies(employee, job.get('participants')):
+                    level_value = _employee_level(employee)
+                    label = 'niet ingevuld' if level_value is None else str(level_value)
+                    job_warnings.append(f"⚠️ {employee['name']} heeft niveau {label}; dit niveau is niet zelfstandig passend voor {job.get('participants') or '?'} personen.")
                 level = _availability_level(employee, job['date'], start_dt, end_dt)
                 if level == 'niet':
                     job_warnings.append(f"⚠️ {employee['name']} staat niet beschikbaar voor deze diensttijd.")
@@ -175,6 +201,8 @@ def assign_staff_to_plan(plan, employees, manual_overrides=None):
                 if e['id'] in selected_ids:
                     continue
                 if not _skill_yes(e, job.get('activity','')):
+                    continue
+                if not _level_qualifies(e, job.get('participants')):
                     continue
                 level = _availability_level(e, job['date'], start_dt, end_dt)
                 if level == 'niet':

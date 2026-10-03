@@ -470,8 +470,11 @@ def _ensure_personnel_schema(cur):
             own_transport TEXT NOT NULL DEFAULT 'Onbekend',
             active BOOLEAN NOT NULL DEFAULT TRUE,
             notes TEXT NOT NULL DEFAULT '',
+            level INTEGER NULL,
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )""")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS level INTEGER NULL")
+    cur.execute("UPDATE employees SET level=4 WHERE (LOWER(name) IN ('willeke','dennis','jorian') OR LOWER(name) LIKE 'willeke %' OR LOWER(name) LIKE 'dennis %' OR LOWER(name) LIKE 'jorian %') AND level IS NULL")
     cur.execute("""
         CREATE TABLE IF NOT EXISTS employee_availability (
             employee_id BIGINT REFERENCES employees(id) ON DELETE CASCADE,
@@ -557,6 +560,9 @@ def save_personnel_import(rows, filename=''):
                         VALUES (%s,%s,%s)
                         ON CONFLICT(employee_id,activity) DO UPDATE SET skill_status=EXCLUDED.skill_status
                     """, (employee_id, activity, status))
+            cur.execute("""UPDATE employees SET level=4,updated_at=NOW()
+                WHERE (LOWER(name) IN ('willeke','dennis','jorian') OR LOWER(name) LIKE 'willeke %' OR LOWER(name) LIKE 'dennis %' OR LOWER(name) LIKE 'jorian %')
+                  AND level IS NULL""")
             cur.execute("INSERT INTO personnel_imports(filename,row_count) VALUES (%s,%s)", (filename, len(rows)))
         conn.commit()
     return len(imported_names)
@@ -682,7 +688,7 @@ def set_personnel_skill_active(activity, active):
                 raise ValueError('Vaardigheid niet gevonden.')
         conn.commit()
 
-def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbekend', notes=''):
+def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbekend', notes='', level=''):
     name = (name or '').strip()
     if not name:
         raise ValueError('Naam ontbreekt.')
@@ -691,11 +697,11 @@ def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbe
         with conn.cursor() as cur:
             _ensure_personnel_schema(cur)
             cur.execute("""
-                INSERT INTO employees(name,driving_license,own_transport,active,notes,updated_at)
-                VALUES (%s,%s,%s,TRUE,%s,NOW())
+                INSERT INTO employees(name,driving_license,own_transport,active,notes,level,updated_at)
+                VALUES (%s,%s,%s,TRUE,%s,%s,NOW())
                 ON CONFLICT(name) DO NOTHING
                 RETURNING id
-            """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend', notes or ''))
+            """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend', notes or '', int(level) if str(level).strip() in {'0','1','2','3','4'} else None))
             created = cur.fetchone()
             if not created:
                 raise ValueError('Deze medewerker bestaat al.')
@@ -712,7 +718,7 @@ def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbe
     return employee_id
 
 
-def save_personnel_employee(employee_id, name, driving_license, own_transport, active, notes,
+def save_personnel_employee(employee_id, name, driving_license, own_transport, active, notes, level,
                             enabled_week_modes, availability_by_mode, skills):
     ensure_schema()
     employee_id = int(employee_id)
@@ -727,9 +733,9 @@ def save_personnel_employee(employee_id, name, driving_license, own_transport, a
             _ensure_personnel_schema(cur)
             cur.execute("""
                 UPDATE employees SET name=%s,driving_license=%s,own_transport=%s,
-                    active=%s,notes=%s,updated_at=NOW() WHERE id=%s
+                    active=%s,notes=%s,level=%s,updated_at=NOW() WHERE id=%s
             """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend',
-                  bool(active), notes or '', employee_id))
+                  bool(active), notes or '', int(level) if str(level).strip() in {'0','1','2','3','4'} else None, employee_id))
             if cur.rowcount != 1:
                 raise ValueError('Medewerker niet gevonden.')
             cur.execute("DELETE FROM employee_availability WHERE employee_id=%s", (employee_id,))
@@ -765,7 +771,7 @@ def get_personnel():
     with connection() as conn:
         with conn.cursor() as cur:
             _ensure_personnel_schema(cur)
-            cur.execute("SELECT id,name,driving_license,own_transport,active,notes,updated_at FROM employees ORDER BY name")
+            cur.execute("SELECT id,name,driving_license,own_transport,active,notes,level,updated_at FROM employees ORDER BY name")
             employees = [dict(r) for r in cur.fetchall()]
             cur.execute("SELECT employee_id,week_mode,slot,status FROM employee_availability ORDER BY employee_id,week_mode,slot")
             availability = [dict(r) for r in cur.fetchall()]
