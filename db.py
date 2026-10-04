@@ -481,9 +481,13 @@ def _ensure_personnel_schema(cur):
         )""")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS level INTEGER NULL")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS username TEXT NOT NULL DEFAULT ''")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS password_hash TEXT NOT NULL DEFAULT ''")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS portal_active BOOLEAN NOT NULL DEFAULT TRUE")
     cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS employees_email_unique_idx ON employees(LOWER(email)) WHERE email <> ''")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS employees_username_unique_idx ON employees(LOWER(username)) WHERE username <> ''")
+    cur.execute("""UPDATE employees SET username='willeke.terbraak',email='patrick@tossbv.nl',portal_active=TRUE,updated_at=NOW()
+                   WHERE (LOWER(name)='willeke ter braak' OR LOWER(name)='willeke' OR LOWER(name) LIKE 'willeke ter braak%')""")
     cur.execute("UPDATE employees SET level=4 WHERE (LOWER(name) IN ('willeke','dennis','jorian') OR LOWER(name) LIKE 'willeke %' OR LOWER(name) LIKE 'dennis %' OR LOWER(name) LIKE 'jorian %') AND level IS NULL")
     cur.execute("""
         CREATE TABLE IF NOT EXISTS employee_availability (
@@ -740,7 +744,7 @@ def set_personnel_skill_active(activity, active):
                 raise ValueError('Vaardigheid niet gevonden.')
         conn.commit()
 
-def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbekend', notes='', level='', email='', password_hash='', portal_active=True):
+def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbekend', notes='', level='', email='', username='', password_hash='', portal_active=True):
     name = (name or '').strip()
     if not name:
         raise ValueError('Naam ontbreekt.')
@@ -749,11 +753,11 @@ def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbe
         with conn.cursor() as cur:
             _ensure_personnel_schema(cur)
             cur.execute("""
-                INSERT INTO employees(name,driving_license,own_transport,active,notes,level,email,password_hash,portal_active,updated_at)
-                VALUES (%s,%s,%s,TRUE,%s,%s,%s,%s,%s,NOW())
+                INSERT INTO employees(name,driving_license,own_transport,active,notes,level,email,username,password_hash,portal_active,updated_at)
+                VALUES (%s,%s,%s,TRUE,%s,%s,%s,%s,%s,%s,NOW())
                 ON CONFLICT(name) DO NOTHING
                 RETURNING id
-            """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend', notes or '', int(level) if str(level).strip() in {'0','1','2','3','4'} else None, (email or '').strip().lower(), password_hash or '', bool(portal_active)))
+            """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend', notes or '', int(level) if str(level).strip() in {'0','1','2','3','4'} else None, (email or '').strip().lower(), (username or '').strip().lower(), password_hash or '', bool(portal_active)))
             created = cur.fetchone()
             if not created:
                 raise ValueError('Deze medewerker bestaat al.')
@@ -771,7 +775,7 @@ def add_personnel_employee(name, driving_license='Onbekend', own_transport='Onbe
 
 
 def save_personnel_employee(employee_id, name, driving_license, own_transport, active, notes, level,
-                            enabled_week_modes, availability_by_mode, skills, email='', password_hash=None, portal_active=True):
+                            enabled_week_modes, availability_by_mode, skills, email='', username='', password_hash=None, portal_active=True):
     ensure_schema()
     employee_id = int(employee_id)
     name = (name or '').strip()
@@ -786,17 +790,17 @@ def save_personnel_employee(employee_id, name, driving_license, own_transport, a
             if password_hash is None:
                 cur.execute("""
                     UPDATE employees SET name=%s,driving_license=%s,own_transport=%s,
-                        active=%s,notes=%s,level=%s,email=%s,portal_active=%s,updated_at=NOW() WHERE id=%s
+                        active=%s,notes=%s,level=%s,email=%s,username=%s,portal_active=%s,updated_at=NOW() WHERE id=%s
                 """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend',
                       bool(active), notes or '', int(level) if str(level).strip() in {'0','1','2','3','4'} else None,
-                      (email or '').strip().lower(), bool(portal_active), employee_id))
+                      (email or '').strip().lower(), (username or '').strip().lower(), bool(portal_active), employee_id))
             else:
                 cur.execute("""
                     UPDATE employees SET name=%s,driving_license=%s,own_transport=%s,
-                        active=%s,notes=%s,level=%s,email=%s,password_hash=%s,portal_active=%s,updated_at=NOW() WHERE id=%s
+                        active=%s,notes=%s,level=%s,email=%s,username=%s,password_hash=%s,portal_active=%s,updated_at=NOW() WHERE id=%s
                 """, (name, driving_license or 'Onbekend', own_transport or 'Onbekend',
                       bool(active), notes or '', int(level) if str(level).strip() in {'0','1','2','3','4'} else None,
-                      (email or '').strip().lower(), password_hash or '', bool(portal_active), employee_id))
+                      (email or '').strip().lower(), (username or '').strip().lower(), password_hash or '', bool(portal_active), employee_id))
             if cur.rowcount != 1:
                 raise ValueError('Medewerker niet gevonden.')
             cur.execute("DELETE FROM employee_availability WHERE employee_id=%s", (employee_id,))
@@ -832,7 +836,7 @@ def get_personnel():
     with connection() as conn:
         with conn.cursor() as cur:
             _ensure_personnel_schema(cur)
-            cur.execute("SELECT id,name,driving_license,own_transport,active,notes,level,email,portal_active,(password_hash <> '') AS has_password,updated_at FROM employees ORDER BY name")
+            cur.execute("SELECT id,name,driving_license,own_transport,active,notes,level,email,username,portal_active,(password_hash <> '') AS has_password,updated_at FROM employees ORDER BY name")
             employees = [dict(r) for r in cur.fetchall()]
             cur.execute("SELECT employee_id,week_mode,slot,status FROM employee_availability ORDER BY employee_id,week_mode,slot")
             availability = [dict(r) for r in cur.fetchall()]
@@ -1150,10 +1154,36 @@ def get_employee_by_email(email):
     with connection() as conn:
         with conn.cursor() as cur:
             _ensure_personnel_schema(cur)
-            cur.execute("""SELECT id,name,email,password_hash,portal_active,active,level
+            cur.execute("""SELECT id,name,email,username,password_hash,portal_active,active,level
                            FROM employees WHERE LOWER(email)=%s LIMIT 1""", (email,))
             row=cur.fetchone()
     return dict(row) if row else None
+
+
+def get_employee_by_login(login):
+    login=(login or '').strip().lower()
+    if not login:
+        return None
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""SELECT id,name,email,username,password_hash,portal_active,active,level
+                           FROM employees
+                           WHERE LOWER(username)=%s OR LOWER(email)=%s
+                           LIMIT 1""", (login,login))
+            row=cur.fetchone()
+    return dict(row) if row else None
+
+
+def set_employee_password(employee_id,password_hash):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("UPDATE employees SET password_hash=%s,portal_active=TRUE,updated_at=NOW() WHERE id=%s",
+                        (password_hash or '',int(employee_id)))
+        conn.commit()
 
 
 def get_employee_by_id(employee_id):
@@ -1161,7 +1191,7 @@ def get_employee_by_id(employee_id):
     with connection() as conn:
         with conn.cursor() as cur:
             _ensure_personnel_schema(cur)
-            cur.execute("""SELECT id,name,email,password_hash,portal_active,active,level,
+            cur.execute("""SELECT id,name,email,username,password_hash,portal_active,active,level,
                                   driving_license,own_transport,notes
                            FROM employees WHERE id=%s""", (int(employee_id),))
             row=cur.fetchone()

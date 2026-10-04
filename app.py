@@ -594,6 +594,7 @@ def personnel_add():
             request.form.get('notes',''),
             request.form.get('level',''),
             request.form.get('email',''),
+            request.form.get('username',''),
             generate_password_hash(password) if password else '',
             request.form.get('portal_active','on')=='on',
         )
@@ -628,6 +629,7 @@ def personnel_save():
             availability_by_mode=availability,
             skills=skills,
             email=request.form.get('email',''),
+            username=request.form.get('username',''),
             password_hash=(generate_password_hash((request.form.get('password') or '').strip())
                            if (request.form.get('password') or '').strip() else None),
             portal_active=request.form.get('portal_active')=='on',
@@ -782,14 +784,42 @@ def _staff_employee():
 @app.route('/staff/login',methods=['GET','POST'])
 def staff_login():
     error=None
+    message=(request.args.get('message') or '').strip()
     if request.method=='POST':
-        emp=db.get_employee_by_email(request.form.get('email',''))
+        emp=db.get_employee_by_login(request.form.get('login',''))
         password=request.form.get('password','')
         if emp and emp.get('portal_active') and emp.get('active') and emp.get('password_hash') and check_password_hash(emp['password_hash'],password):
             session['staff_employee_id']=emp['id']
             return redirect(url_for('staff_portal'))
-        error='E-mailadres of wachtwoord klopt niet.'
-    return render_template('staff_login.html',error=error)
+        if emp and emp.get('portal_active') and emp.get('active') and not emp.get('password_hash'):
+            return redirect(url_for('staff_activate',login=(emp.get('username') or emp.get('email') or '')))
+        error='Gebruikersnaam/e-mail of wachtwoord klopt niet.'
+    return render_template('staff_login.html',error=error,message=message)
+
+
+@app.route('/staff/activate',methods=['GET','POST'])
+def staff_activate():
+    error=None
+    login=(request.values.get('login') or '').strip()
+    if request.method=='POST':
+        email=(request.form.get('email') or '').strip().lower()
+        password=request.form.get('password','')
+        password2=request.form.get('password2','')
+        emp=db.get_employee_by_login(login)
+        if not emp or not emp.get('portal_active') or not emp.get('active'):
+            error='Medewerkeraccount niet gevonden of niet actief.'
+        elif (emp.get('email') or '').strip().lower()!=email:
+            error='Het e-mailadres hoort niet bij deze medewerker.'
+        elif emp.get('password_hash'):
+            error='Voor dit account is al een wachtwoord ingesteld. Log in of laat de planner het wachtwoord resetten.'
+        elif len(password)<8:
+            error='Kies een wachtwoord van minimaal 8 tekens.'
+        elif password!=password2:
+            error='De twee wachtwoorden zijn niet gelijk.'
+        else:
+            db.set_employee_password(emp['id'],generate_password_hash(password))
+            return redirect(url_for('staff_login',message='Wachtwoord aangemaakt. Je kunt nu inloggen.'))
+    return render_template('staff_activate.html',error=error,login=login)
 
 
 @app.get('/staff/logout')
@@ -803,14 +833,50 @@ def staff_portal():
     emp=_staff_employee()
     if not emp:
         return redirect(url_for('staff_login'))
-    date_text=(request.args.get('date') or datetime.now(ZoneInfo('Europe/Amsterdam')).date().isoformat()).strip()
+
+    today=datetime.now(ZoneInfo('Europe/Amsterdam')).date()
+    date_text=(request.args.get('date') or today.isoformat()).strip()
     try:
         day=datetime.fromisoformat(date_text).date()
     except Exception:
-        day=datetime.now(ZoneInfo('Europe/Amsterdam')).date(); date_text=day.isoformat()
-    rows=db.list_employee_shifts(emp['id'],date_text,date_text)
-    return render_template('staff_portal.html',employee=emp,shifts=rows,date=date_text,
-                           prev_date=(day-timedelta(days=1)).isoformat(),next_date=(day+timedelta(days=1)).isoformat())
+        day=today
+        date_text=day.isoformat()
+
+    # The employee portal always scopes data to the logged-in employee.
+    # Day view shows only this employee's shifts on the selected day.
+    day_shifts=db.list_employee_shifts(emp['id'],date_text,date_text)
+
+    # Week view runs Monday through Sunday around the selected day.
+    week_start=day-timedelta(days=day.weekday())
+    week_end=week_start+timedelta(days=6)
+    week_rows=db.list_employee_shifts(emp['id'],week_start.isoformat(),week_end.isoformat())
+    week_days=[]
+    for offset in range(7):
+        d=week_start+timedelta(days=offset)
+        shifts=[row for row in week_rows if str(row.get('work_date'))[:10]==d.isoformat()]
+        week_days.append({
+            'date':d.isoformat(),
+            'date_obj':d,
+            'is_today':d==today,
+            'is_selected':d==day,
+            'shifts':shifts,
+        })
+
+    return render_template(
+        'staff_portal.html',
+        employee=emp,
+        shifts=day_shifts,
+        date=date_text,
+        day=day,
+        today=today,
+        prev_date=(day-timedelta(days=1)).isoformat(),
+        next_date=(day+timedelta(days=1)).isoformat(),
+        week_start=week_start,
+        week_end=week_end,
+        prev_week=(week_start-timedelta(days=7)).isoformat(),
+        next_week=(week_start+timedelta(days=7)).isoformat(),
+        week_days=week_days,
+    )
 
 
 @app.route('/staff/hours/<token>',methods=['GET','POST'])
