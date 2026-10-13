@@ -37,7 +37,8 @@ PLANNER_ENDPOINTS = {'index','upload','save_corrections','generate_logistics',
  'personnel_hours_reopen','personnel_hours_save'}
 HR_ENDPOINTS = {'personnel','personnel_add','personnel_save',
  'personnel_skill_save','personnel_skill_toggle','personnel_upload',
- 'personnel_hours','hr_dashboard','hr_employee_save','hr_adjustment_add'}
+ 'personnel_hours','hr_dashboard','hr_employee_save','hr_adjustment_add',
+ 'hr_employee_profile','hr_event_add','hr_event_status','hr_action','hr_employees'}
 
 @app.before_request
 def require_admin_for_management():
@@ -57,7 +58,7 @@ def require_admin_for_management():
         role = emp.get('app_role') or 'medewerker'
         if endpoint in {'planner_dashboard'} and role == 'planner':
             return None
-        if endpoint in {'hr_dashboard','hr_employee_save','hr_adjustment_add'} and role == 'hr':
+        if endpoint in {'hr_dashboard','hr_employee_save','hr_adjustment_add','hr_employee_profile','hr_event_add','hr_event_status','hr_action','hr_employees'} and role == 'hr':
             return None
         if role == 'planner' and endpoint in PLANNER_ENDPOINTS:
             return None
@@ -1171,7 +1172,7 @@ def route_test():
     except (LocationServiceError,ORSError,Exception) as e: return render_home(error=str(e))
 @app.get('/api/health')
 def health(): return {'ok':True,'ors_key_configured':bool(os.getenv('ORS_API_KEY')),'database_configured':db_status(),'routing_profile':'driving-car'}
-if __name__=='__main__': app.run(debug=True)
+# Entrypoint below (after all route registrations).
 
 
 # v13.4 role dashboards and HR records
@@ -1181,8 +1182,7 @@ def planner_dashboard():
 
 @app.get('/hr')
 def hr_dashboard():
-    people=db.hr_list_employees()
-    return render_template('hr_dashboard.html',people=people,message=request.args.get('message'))
+    return _render_hr('hr_dashboard.html')
 
 @app.post('/admin/users/<int:employee_id>/role')
 def admin_user_role(employee_id):
@@ -1196,7 +1196,7 @@ def admin_user_role(employee_id):
 def hr_employee_save(employee_id):
     try:
         db.hr_save_employee(employee_id,request.form.get('contract_type'),request.form.get('weekly_hours'))
-        return redirect(url_for('hr_dashboard',message='Contractgegevens opgeslagen'))
+        return redirect(url_for('hr_employees',message='Contractgegevens opgeslagen'))
     except (ValueError,TypeError) as e:
         return redirect(url_for('hr_dashboard',message=str(e)))
 
@@ -1205,6 +1205,109 @@ def hr_adjustment_add(employee_id):
     try:
         db.hr_add_adjustment(employee_id,request.form.get('kind'),request.form.get('hours'),request.form.get('note',''),
                              'admin' if _admin_logged_in() else 'hr:'+str(session.get('staff_employee_id')))
-        return redirect(url_for('hr_dashboard',message='Mutatie geregistreerd'))
+        return redirect(url_for('hr_employees',message='Mutatie geregistreerd'))
     except (ValueError,TypeError) as e:
         return redirect(url_for('hr_dashboard',message=str(e)))
+
+# HR signaleringen: echt personeelsbestand en een duidelijk afgescheiden demo.
+from datetime import date
+
+def _hr_sections(people,events,actions,demo):
+    today=datetime.now(ZoneInfo('Europe/Amsterdam')).date()
+    from calendar import monthrange
+    def plus_months(d,n):
+        y=d.year+(d.month-1+n)//12; m=(d.month-1+n)%12+1
+        return date(y,m,min(d.day,monthrange(y,m)[1]))
+    sections={k:[] for k in ('contract','evaluation','birthday','anniversary','hours','sickness','leave')}
+    for e in people:
+        eid=e['id']; name=e['name']
+        def add(kind,detail,key):
+            sections[kind].append(dict(name=name,detail=detail,key=key,employee_id=eid,
+                done=bool(actions.get((eid,key))),demo=False))
+        if e['contract_end'] and today<=e['contract_end']<=plus_months(today,3):
+            add('contract','Eindigt '+e['contract_end'].strftime('%d-%m-%Y'),'contract:'+e['contract_end'].isoformat())
+        if e['next_evaluation'] and today<=e['next_evaluation']<=plus_months(today,2):
+            add('evaluation','Gesprek '+e['next_evaluation'].strftime('%d-%m-%Y'),'evaluation:'+e['next_evaluation'].isoformat())
+        if e['birth_date']:
+            b=e['birth_date']; yr=today.year
+            for year in (yr,yr+1):
+                birthday=date(year,b.month,min(b.day,monthrange(year,b.month)[1]))
+                if today<=birthday<=today+timedelta(days=30):
+                    add('birthday','Jarig '+birthday.strftime('%d-%m-%Y'),'birthday:'+str(year)); break
+        if e['employment_start']:
+            start=e['employment_start']
+            for year in (today.year,today.year+1):
+                if year<=start.year: continue
+                anniversary=date(year,start.month,min(start.day,monthrange(year,start.month)[1]))
+                if today<=anniversary<=today+timedelta(days=30):
+                    add('anniversary',f'{year-start.year} jaar in dienst op '+anniversary.strftime('%d-%m-%Y'),'anniversary:'+str(year)); break
+        balance=float(e['overuren'] or 0)
+        if balance:
+            add('hours',f'{balance:+g} uur (geregistreerde mutaties)','hours:review')
+    by_id={e['id']:e['name'] for e in people}
+    for ev in events:
+        if ev['employee_id'] not in by_id: continue
+        if ev['event_type']=='leave' and ev['status']=='open':
+            sections['leave'].append(dict(name=by_id[ev['employee_id']],detail=f"{ev['start_date']:%d-%m-%Y} t/m {ev['end_date']:%d-%m-%Y}",key=str(ev['id']),employee_id=ev['employee_id'],done=False,demo=False,event=True))
+        if ev['event_type']=='sickness' and ev['status']=='open' and ev['end_date']>=today-timedelta(days=7):
+            sections['sickness'].append(dict(name=by_id[ev['employee_id']],detail=f"{ev['start_date']:%d-%m-%Y} t/m {ev['end_date']:%d-%m-%Y}",key=str(ev['id']),employee_id=ev['employee_id'],done=False,demo=False,event=True))
+    example={'contract':('30-11-2026','contract:2026-11-30'), 'evaluation':('10-11-2026','evaluation:2026-11-10'),
+        'birthday':('29-10-2026 · cadeau verzenden','birthday:2026'),
+        'anniversary':('01-11-2026 · 5 jaar in dienst','anniversary:2026'),
+        'hours':('+16 overuren','hours:review'),
+        'sickness':('08-10-2026 t/m 10-10-2026','sickness:demo'),
+        'leave':('20-11-2026 t/m 23-11-2026','leave:demo')}
+    for kind,(detail,key) in example.items():
+        sections[kind].insert(0,dict(name='Thomas de Vries',detail=detail,key=key,employee_id=0,
+            done=bool(demo.get(key)),demo=True))
+    return sections
+
+def _render_hr(template,**kwargs):
+    people,events,actions,demo=db.hr_people_detail()
+    sections=_hr_sections(people,events,actions,demo)
+    return render_template(template,people=people,sections=sections,
+        message=request.args.get('message'),**kwargs)
+
+@app.get('/hr/medewerkers')
+def hr_employees():
+    return _render_hr('hr_employees.html')
+
+@app.post('/hr/employees/<int:employee_id>/profile')
+def hr_employee_profile(employee_id):
+    try:
+        db.hr_save_profile(employee_id,*(request.form.get(k,'') for k in ('birth_date','employment_start','contract_end','next_evaluation')))
+        return redirect(url_for('hr_employees',message='HR-gegevens opgeslagen')+'#employee-'+str(employee_id))
+    except (ValueError,TypeError) as e:
+        return redirect(url_for('hr_employees',message=str(e)))
+
+@app.post('/hr/employees/<int:employee_id>/events')
+def hr_event_add(employee_id):
+    try:
+        db.hr_add_event(employee_id,request.form.get('event_type'),request.form.get('start_date',''),request.form.get('end_date',''),request.form.get('note',''))
+        return redirect(url_for('hr_employees',message='Melding geregistreerd')+'#employee-'+str(employee_id))
+    except (ValueError,TypeError) as e:
+        return redirect(url_for('hr_employees',message=str(e)))
+
+@app.post('/hr/events/<int:event_id>/status')
+def hr_event_status(event_id):
+    try:
+        db.hr_set_event_status(event_id,request.form.get('status'))
+        return redirect(url_for('hr_dashboard',message='Melding bijgewerkt'))
+    except ValueError as e:
+        return redirect(url_for('hr_dashboard',message=str(e)))
+
+@app.post('/hr/actions')
+def hr_action():
+    try:
+        demo=request.form.get('demo')=='1'
+        eid=int(request.form.get('employee_id','0'))
+        if not demo and eid<=0: abort(400)
+        db.hr_set_action(eid,request.form.get('action_key',''),request.form.get('completed')=='1',
+            'admin' if _admin_logged_in() else 'hr:'+str(session.get('staff_employee_id')),demo=demo)
+        target=request.form.get('return_to','dashboard')
+        return redirect(url_for('hr_employees' if target=='employees' else 'hr_dashboard',message='Actie bijgewerkt'))
+    except (ValueError,TypeError) as e:
+        return redirect(url_for('hr_dashboard',message=str(e)))
+
+if __name__=='__main__':
+    app.run(debug=True)

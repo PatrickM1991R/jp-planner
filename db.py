@@ -481,6 +481,29 @@ def _ensure_personnel_schema(cur):
         )""")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS app_role TEXT NOT NULL DEFAULT 'medewerker'")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS contract_type TEXT NOT NULL DEFAULT 'flexkracht'")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS birth_date DATE")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS employment_start DATE")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS contract_end DATE")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS next_evaluation DATE")
+    cur.execute("""CREATE TABLE IF NOT EXISTS hr_events (
+        id BIGSERIAL PRIMARY KEY, employee_id BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        event_type TEXT NOT NULL CHECK (event_type IN ('leave','sickness')),
+        start_date DATE NOT NULL, end_date DATE NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open', note TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CHECK (end_date >= start_date)
+    )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS hr_actions (
+        employee_id BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        action_key TEXT NOT NULL, completed BOOLEAN NOT NULL DEFAULT FALSE,
+        completed_at TIMESTAMPTZ, actor TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY(employee_id, action_key)
+    )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS hr_demo_actions (
+        action_key TEXT PRIMARY KEY, completed BOOLEAN NOT NULL DEFAULT FALSE,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )""")
+
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS weekly_contract_hours NUMERIC(7,2) NOT NULL DEFAULT 0")
     cur.execute("""CREATE TABLE IF NOT EXISTS employee_hr_adjustments (
         id BIGSERIAL PRIMARY KEY, employee_id BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
@@ -1591,4 +1614,80 @@ def hr_add_adjustment(employee_id,kind,hours,note,actor):
             _ensure_personnel_schema(cur)
             cur.execute('INSERT INTO employee_hr_adjustments(employee_id,kind,hours,note,actor) VALUES (%s,%s,%s,%s,%s)',
                         (int(employee_id),kind,amount,note.strip()[:500],actor))
+        conn.commit()
+
+# HR signalering, dossiers en demo (v13.5).
+def hr_people_detail():
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""SELECT e.id,e.name,e.contract_type,e.weekly_contract_hours,
+                e.birth_date,e.employment_start,e.contract_end,e.next_evaluation,
+                COALESCE(SUM(CASE WHEN a.kind='overuren' THEN a.hours ELSE 0 END),0) AS overuren
+                FROM employees e LEFT JOIN employee_hr_adjustments a ON a.employee_id=e.id
+                WHERE e.active=TRUE GROUP BY e.id ORDER BY lower(e.name)""")
+            people=[dict(x) for x in cur.fetchall()]
+            cur.execute("SELECT * FROM hr_events ORDER BY start_date DESC")
+            events=[dict(x) for x in cur.fetchall()]
+            cur.execute("SELECT employee_id,action_key,completed FROM hr_actions")
+            actions={(x['employee_id'],x['action_key']):x['completed'] for x in cur.fetchall()}
+            cur.execute("SELECT action_key,completed FROM hr_demo_actions")
+            demo={x['action_key']:x['completed'] for x in cur.fetchall()}
+    return people,events,actions,demo
+
+def hr_save_profile(employee_id, birth_date, employment_start, contract_end, next_evaluation):
+    from datetime import date
+    def parse(x):
+        x=(x or '').strip()
+        return date.fromisoformat(x) if x else None
+    vals=[parse(x) for x in (birth_date,employment_start,contract_end,next_evaluation)]
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""UPDATE employees SET birth_date=%s,employment_start=%s,
+                contract_end=%s,next_evaluation=%s,updated_at=NOW() WHERE id=%s""",(*vals,int(employee_id)))
+            if cur.rowcount!=1: raise ValueError('Medewerker niet gevonden')
+        conn.commit()
+
+def hr_add_event(employee_id,event_type,start_date,end_date,note):
+    from datetime import date
+    if event_type not in ('leave','sickness'): raise ValueError('Ongeldig type')
+    start=date.fromisoformat(start_date); end=date.fromisoformat(end_date)
+    if end<start: raise ValueError('Einddatum ligt voor begindatum')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute('INSERT INTO hr_events(employee_id,event_type,start_date,end_date,note) VALUES (%s,%s,%s,%s,%s)',
+                (int(employee_id),event_type,start,end,(note or '')[:300]))
+        conn.commit()
+
+def hr_set_event_status(event_id,status):
+    if status not in ('approved','rejected','followed_up','open'): raise ValueError('Ongeldige status')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute('UPDATE hr_events SET status=%s WHERE id=%s',(status,int(event_id)))
+            if cur.rowcount!=1: raise ValueError('Melding niet gevonden')
+        conn.commit()
+
+def hr_set_action(employee_id,action_key,completed,actor,demo=False):
+    if len(action_key)>100 or not action_key or not all(c.isalnum() or c in '_:-' for c in action_key):
+        raise ValueError('Ongeldige actie')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            if demo:
+                cur.execute("""INSERT INTO hr_demo_actions(action_key,completed) VALUES (%s,%s)
+                    ON CONFLICT(action_key) DO UPDATE SET completed=EXCLUDED.completed,updated_at=NOW()""",(action_key,bool(completed)))
+            else:
+                cur.execute("""INSERT INTO hr_actions(employee_id,action_key,completed,completed_at,actor)
+                    VALUES (%s,%s,%s,CASE WHEN %s THEN NOW() ELSE NULL END,%s)
+                    ON CONFLICT(employee_id,action_key) DO UPDATE SET completed=EXCLUDED.completed,
+                    completed_at=EXCLUDED.completed_at,actor=EXCLUDED.actor""",
+                    (int(employee_id),action_key,bool(completed),bool(completed),actor))
         conn.commit()
