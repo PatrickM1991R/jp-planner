@@ -3,6 +3,9 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import secrets
+import hashlib
+from functools import wraps
+from flask import abort
 from flask import Flask, render_template, request, redirect, url_for, session
 from dotenv import load_dotenv
 import db
@@ -17,6 +20,89 @@ import mail_service
 
 load_dotenv(); app=Flask(__name__); app.secret_key=os.getenv('FLASK_SECRET_KEY','dev-change-me')
 
+
+
+# v13.3: separate administrator authentication and one-use password resets.
+def _admin_logged_in():
+    return session.get('admin_login') == 'Patrick.Mayer'
+
+@app.before_request
+def require_admin_for_management():
+    endpoint = request.endpoint or ''
+    public = {'admin_login','admin_setup','admin_logout','staff_login','staff_logout',
+              'staff_portal','staff_hours_token','staff_activate','staff_password_reset',
+              'static','health','approve_hours_email'}
+    if endpoint in public or request.path.startswith('/static/'):
+        return None
+    if not _admin_logged_in():
+        return redirect(url_for('admin_login', next=request.path))
+
+@app.route('/admin/setup',methods=['GET','POST'])
+def admin_setup():
+    db.ensure_admin_auth_schema()
+    if db.admin_exists():
+        return redirect(url_for('admin_login'))
+    error=None
+    if request.method=='POST':
+        setup_token=os.getenv('JP_ADMIN_SETUP_TOKEN','')
+        password=request.form.get('password','')
+        if not setup_token or not secrets.compare_digest(request.form.get('setup_token',''),setup_token):
+            error='Ongeldige eenmalige installatiecode.'
+        elif len(password)<12 or password!=request.form.get('password2'):
+            error='Gebruik een gelijk wachtwoord van minimaal 12 tekens.'
+        else:
+            db.create_first_admin('Patrick.Mayer','Patrick@jpactiviteiten.nl',generate_password_hash(password))
+            return redirect(url_for('admin_login',message='Beheerder aangemaakt. Log nu in.'))
+    return render_template('admin_setup.html',error=error)
+
+@app.route('/admin/login',methods=['GET','POST'])
+def admin_login():
+    db.ensure_admin_auth_schema()
+    error=None
+    if request.method=='POST':
+        admin=db.get_admin(request.form.get('login',''))
+        if admin and check_password_hash(admin['password_hash'],request.form.get('password','')):
+            session.clear()
+            session['admin_login']=admin['username']
+            session.permanent=True
+            return redirect(url_for('index'))
+        error='Inloggegevens onjuist.'
+    return render_template('admin_login.html',error=error,message=request.args.get('message'))
+
+@app.post('/admin/logout')
+def admin_logout():
+    session.clear()
+    return redirect(url_for('admin_login'))
+
+@app.get('/admin/users')
+def admin_users():
+    employees,_=db.get_personnel()
+    return render_template('admin_users.html',employees=employees,message=request.args.get('message'))
+
+@app.post('/admin/users/<int:employee_id>/reset')
+def admin_user_reset(employee_id):
+    token=secrets.token_urlsafe(32)
+    db.create_staff_reset(employee_id,hashlib.sha256(token.encode()).hexdigest())
+    link=url_for('staff_password_reset',token=token,_external=True)
+    # Link is displayed once; no mail dependency. Do not log it.
+    return render_template('admin_reset_link.html',link=link)
+
+@app.route('/staff/reset/<token>',methods=['GET','POST'])
+def staff_password_reset(token):
+    digest=hashlib.sha256(token.encode()).hexdigest()
+    employee=db.lookup_staff_reset(digest)
+    if not employee:
+        return render_template('staff_reset.html',error='Deze link is ongeldig of verlopen.',valid=False)
+    error=None
+    if request.method=='POST':
+        password=request.form.get('password','')
+        if len(password)<12 or password!=request.form.get('password2'):
+            error='Gebruik een gelijk wachtwoord van minimaal 12 tekens.'
+        elif db.consume_staff_reset(digest,generate_password_hash(password)):
+            return redirect(url_for('staff_login',message='Wachtwoord hersteld. Je kunt inloggen.'))
+        else:
+            error='Link is verlopen of al gebruikt.'
+    return render_template('staff_reset.html',error=error,valid=True)
 
 @app.after_request
 def apply_jp_house_style(response):
@@ -792,34 +878,14 @@ def staff_login():
             session['staff_employee_id']=emp['id']
             return redirect(url_for('staff_portal'))
         if emp and emp.get('portal_active') and emp.get('active') and not emp.get('password_hash'):
-            return redirect(url_for('staff_activate',login=(emp.get('username') or emp.get('email') or '')))
+            error='Vraag de beheerder om een eenmalige activatie- of herstellink.'
         error='Gebruikersnaam/e-mail of wachtwoord klopt niet.'
     return render_template('staff_login.html',error=error,message=message)
 
 
-@app.route('/staff/activate',methods=['GET','POST'])
+@app.get('/staff/activate')
 def staff_activate():
-    error=None
-    login=(request.values.get('login') or '').strip()
-    if request.method=='POST':
-        email=(request.form.get('email') or '').strip().lower()
-        password=request.form.get('password','')
-        password2=request.form.get('password2','')
-        emp=db.get_employee_by_login(login)
-        if not emp or not emp.get('portal_active') or not emp.get('active'):
-            error='Medewerkeraccount niet gevonden of niet actief.'
-        elif (emp.get('email') or '').strip().lower()!=email:
-            error='Het e-mailadres hoort niet bij deze medewerker.'
-        elif emp.get('password_hash'):
-            error='Voor dit account is al een wachtwoord ingesteld. Log in of laat de planner het wachtwoord resetten.'
-        elif len(password)<8:
-            error='Kies een wachtwoord van minimaal 8 tekens.'
-        elif password!=password2:
-            error='De twee wachtwoorden zijn niet gelijk.'
-        else:
-            db.set_employee_password(emp['id'],generate_password_hash(password))
-            return redirect(url_for('staff_login',message='Wachtwoord aangemaakt. Je kunt nu inloggen.'))
-    return render_template('staff_activate.html',error=error,login=login)
+    return redirect(url_for('staff_login',message='Vraag de beheerder om een activatielink.'))
 
 
 @app.get('/staff/logout')

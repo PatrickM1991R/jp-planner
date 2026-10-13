@@ -1459,3 +1459,71 @@ def personnel_hours_month(year, month):
         t['days']=len(t['days']); out.append(t)
     out.sort(key=lambda x:x['name'].casefold())
     return rows,out
+
+
+# v13.3 secure administrator and password reset storage.
+def ensure_admin_auth_schema():
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""CREATE TABLE IF NOT EXISTS planner_admins (
+                username TEXT PRIMARY KEY, email TEXT NOT NULL,
+                password_hash TEXT NOT NULL, created_at TIMESTAMPTZ DEFAULT NOW())""")
+            cur.execute("""CREATE TABLE IF NOT EXISTS staff_password_resets (
+                token_hash TEXT PRIMARY KEY, employee_id INTEGER NOT NULL REFERENCES employees(id),
+                expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW())""")
+        conn.commit()
+
+def admin_exists():
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT 1 FROM planner_admins LIMIT 1')
+            return cur.fetchone() is not None
+
+def create_first_admin(username,email,password_hash):
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT 1 FROM planner_admins LIMIT 1')
+            if cur.fetchone():
+                raise ValueError('Er bestaat al een beheerder.')
+            cur.execute('INSERT INTO planner_admins(username,email,password_hash) VALUES (%s,%s,%s)',
+                        (username,email,password_hash))
+        conn.commit()
+
+def get_admin(login):
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT * FROM planner_admins WHERE lower(username)=lower(%s) OR lower(email)=lower(%s)',(login,login))
+            return cur.fetchone()
+
+def create_staff_reset(employee_id,token_hash):
+    ensure_admin_auth_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('DELETE FROM staff_password_resets WHERE employee_id=%s',(employee_id,))
+            cur.execute("""INSERT INTO staff_password_resets(token_hash,employee_id,expires_at)
+                VALUES (%s,%s,NOW()+INTERVAL '30 minutes')""",(token_hash,employee_id))
+        conn.commit()
+
+def lookup_staff_reset(token_hash):
+    ensure_admin_auth_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""SELECT e.id,e.name FROM staff_password_resets r
+                JOIN employees e ON e.id=r.employee_id
+                WHERE r.token_hash=%s AND r.used_at IS NULL AND r.expires_at>NOW()""",(token_hash,))
+            return cur.fetchone()
+
+def consume_staff_reset(token_hash,password_hash):
+    with connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE staff_password_resets SET used_at=NOW()
+                WHERE token_hash=%s AND used_at IS NULL AND expires_at>NOW()
+                RETURNING employee_id""",(token_hash,))
+            row=cur.fetchone()
+            if not row:
+                return False
+            cur.execute('UPDATE employees SET password_hash=%s,portal_active=TRUE,updated_at=NOW() WHERE id=%s',
+                        (password_hash,row['employee_id']))
+        conn.commit()
+    return True
