@@ -33,9 +33,11 @@ PLANNER_ENDPOINTS = {'index','upload','save_corrections','generate_logistics',
  'personnel_add','personnel_save','finalize_roster','reopen_roster',
  'personnel_skill_save','personnel_skill_toggle','personnel_upload',
  'fleet','fleet_depot_save','fleet_save','fleet_material_save',
- 'fleet_stock_save','fleet_stock_bulk_save','route_test','personnel_hours'}
-HR_ENDPOINTS = {'personnel','personnel_hours','hr_dashboard','hr_employee_save',
- 'hr_adjustment_add'}
+ 'fleet_stock_save','fleet_stock_bulk_save','route_test','personnel_hours',
+ 'personnel_hours_reopen','personnel_hours_save'}
+HR_ENDPOINTS = {'personnel','personnel_add','personnel_save',
+ 'personnel_skill_save','personnel_skill_toggle','personnel_upload',
+ 'personnel_hours','hr_dashboard','hr_employee_save','hr_adjustment_add'}
 
 @app.before_request
 def require_admin_for_management():
@@ -47,6 +49,9 @@ def require_admin_for_management():
         return None
     if _admin_logged_in():
         return None
+    # Never allow a staff role to administer user accounts.
+    if endpoint in {'admin_users','admin_user_reset','admin_user_role'}:
+        abort(403)
     emp = _staff_employee()
     if emp:
         role = emp.get('app_role') or 'medewerker'
@@ -899,6 +904,7 @@ def staff_login():
         emp=db.get_employee_by_login(request.form.get('login',''))
         password=request.form.get('password','')
         if emp and emp.get('portal_active') and emp.get('active') and emp.get('password_hash') and check_password_hash(emp['password_hash'],password):
+            session.clear()  # Prevent retaining an earlier administrator session.
             session['staff_employee_id']=emp['id']
             return redirect(url_for('planner_dashboard') if emp.get('app_role')=='planner' else url_for('hr_dashboard') if emp.get('app_role')=='hr' else url_for('staff_portal'))
         if emp and emp.get('portal_active') and emp.get('active') and not emp.get('password_hash'):
