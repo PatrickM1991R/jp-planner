@@ -4,1220 +4,170 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Wagenpark & logistiek - JP Planner</title>
-
 <style>
-:root{
-  --jp-purple:#140821;
-  --jp-gold:#c9a227;
-  --jp-gold-dark:#ad891d;
-  --jp-light:#f7f4fb;
-  --jp-border:#ebe4f2;
-  --jp-muted:#655c70;
-}
-
-*{
-  box-sizing:border-box;
-}
-
-body{
-  font-family:Arial,sans-serif;
-  margin:0;
-  background:var(--jp-light);
-  color:#17131d;
-}
-
-.wrap{
-  max-width:1500px;
-  margin:28px auto;
-  padding:0 24px;
-}
-
-.hero{
-  background:linear-gradient(112deg,#140821,#24113f);
-  color:#fff;
-  border-radius:28px;
-  padding:28px;
-  margin-bottom:20px;
-}
-
-.hero h1{
-  margin:0 0 8px;
-}
-
-.hero a{
-  color:var(--jp-gold);
-  font-weight:800;
-  text-decoration:none;
-}
-
-.card{
-  background:#fff;
-  border:1px solid var(--jp-border);
-  border-radius:24px;
-  padding:22px;
-  margin-bottom:18px;
-  box-shadow:0 14px 35px rgba(36,17,63,.07);
-}
-
-h2,h3{
-  color:var(--jp-purple);
-}
-
-.grid{
-  display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:18px;
-}
-
-.row{
-  display:grid;
-  grid-template-columns:1.1fr 1.6fr 2.4fr .7fr auto;
-  gap:10px;
-  align-items:end;
-  padding:10px 0;
-  border-bottom:1px solid #f0ebf4;
-}
-
-.row:last-child{
-  border-bottom:0;
-}
-
-.vehicle-head{
-  display:flex;
-  justify-content:space-between;
-  gap:15px;
-  align-items:start;
-  flex-wrap:wrap;
-}
-
-.material-table{
-  width:100%;
-  border-collapse:collapse;
-}
-
-.material-table th,
-.material-table td{
-  padding:9px 7px;
-  border-bottom:1px solid #f0ebf4;
-  text-align:left;
-  vertical-align:middle;
-}
-
-.material-table th{
-  font-size:11px;
-  text-transform:uppercase;
-  color:var(--jp-muted);
-}
-
-input,
-select,
-textarea{
-  width:100%;
-  padding:9px;
-  border:1px solid #d9d0e3;
-  border-radius:10px;
-  background:#fff;
-}
-
-input[type=checkbox]{
-  width:auto;
-}
-
-button{
-  border:0;
-  border-radius:999px;
-  padding:10px 16px;
-  background:var(--jp-gold);
-  color:#fff;
-  font-weight:900;
-  cursor:pointer;
-}
-
-button:hover{
-  background:var(--jp-gold-dark);
-}
-
-label{
-  font-size:11px;
-  font-weight:800;
-  color:var(--jp-muted);
-  display:block;
-  margin:0 0 4px;
-}
-
-.muted{
-  color:var(--jp-muted);
-  font-size:12px;
-}
-
-.ok{
-  background:#edf9f1;
-  color:#166534;
-  border:1px solid #ccebd6;
-  border-radius:10px;
-  padding:10px;
-  margin-bottom:14px;
-}
-
-.bad{
-  background:#fff0f0;
-  color:#8b1d1d;
-  border:1px solid #f2c7c7;
-  border-radius:10px;
-  padding:10px;
-  margin-bottom:14px;
-}
-
-.pill{
-  display:inline-block;
-  padding:5px 9px;
-  border-radius:999px;
-  background:#f3eef8;
-  color:#140821;
-  font-size:11px;
-  font-weight:800;
-}
-
-.section-note{
-  margin-top:-6px;
-  margin-bottom:14px;
-}
-
-.stock-card{
-  border:1px solid var(--jp-border);
-  border-radius:18px;
-  padding:14px;
-  margin-top:12px;
-}
-
-.inline-check{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  padding-bottom:8px;
-}
-
-.inline-check label{
-  margin:0;
-}
-
-.stock-total{
-  display:inline-block;
-  min-width:100px;
-  padding:7px 9px;
-  border-radius:8px;
-  background:#f5f0fa;
-  color:var(--jp-purple);
-}
-
-.save-bar{
-  display:flex;
-  justify-content:flex-end;
-  margin-top:14px;
-}
-
-@media(max-width:1000px){
-  .grid{
-    grid-template-columns:1fr;
-  }
-
-  .row{
-    grid-template-columns:1fr 1fr;
-  }
-
-  .row>*:nth-child(3){
-    grid-column:span 2;
-  }
-}
-
-@media(max-width:650px){
-  .row{
-    display:block;
-  }
-
-  .row>*{
-    margin-bottom:9px;
-  }
-
-  .material-table{
-    min-width:850px;
-  }
-
-  .stock-card{
-    overflow-x:auto;
-  }
-}
+:root{--jp-purple:#140821;--jp-gold:#c9a227;--jp-gold-dark:#ad891d;--jp-light:#f7f4fb;--jp-border:#ebe4f2;--jp-muted:#655c70}
+*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;background:var(--jp-light);color:#17131d}.wrap{max-width:1500px;margin:28px auto;padding:0 24px}.hero{background:linear-gradient(112deg,#140821,#24113f);color:#fff;border-radius:28px;padding:28px;margin-bottom:20px}.hero h1{margin:0 0 8px}.hero a{color:var(--jp-gold);font-weight:800;text-decoration:none}.card{background:#fff;border:1px solid var(--jp-border);border-radius:24px;padding:22px;margin-bottom:18px;box-shadow:0 14px 35px rgba(36,17,63,.07)}h2,h3{color:var(--jp-purple)}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.row{display:grid;grid-template-columns:1.1fr 1.6fr 2.4fr .7fr auto;gap:10px;align-items:end;padding:10px 0;border-bottom:1px solid #f0ebf4}.row:last-child{border-bottom:0}.vehicle-head{display:flex;justify-content:space-between;gap:15px;align-items:start;flex-wrap:wrap}.material-table{width:100%;border-collapse:collapse}.material-table th,.material-table td{padding:9px 7px;border-bottom:1px solid #f0ebf4;text-align:left;vertical-align:middle}.material-table th{font-size:11px;text-transform:uppercase;color:var(--jp-muted)}input,select,textarea{width:100%;padding:9px;border:1px solid #d9d0e3;border-radius:10px;background:#fff}input[type=checkbox]{width:auto}button{border:0;border-radius:999px;padding:10px 16px;background:var(--jp-gold);color:#fff;font-weight:900;cursor:pointer}button:hover{background:var(--jp-gold-dark)}label{font-size:11px;font-weight:800;color:var(--jp-muted);display:block;margin:0 0 4px}.muted{color:var(--jp-muted);font-size:12px}.ok{background:#edf9f1;color:#166534;border:1px solid #ccebd6;border-radius:10px;padding:10px;margin-bottom:14px}.bad{background:#fff0f0;color:#8b1d1d;border:1px solid #f2c7c7;border-radius:10px;padding:10px;margin-bottom:14px}.pill{display:inline-block;padding:5px 9px;border-radius:999px;background:#f3eef8;color:#140821;font-size:11px;font-weight:800}.section-note{margin-top:-6px;margin-bottom:14px}.stock-card{border:1px solid var(--jp-border);border-radius:18px;padding:14px;margin-top:12px}.inline-check{display:flex;align-items:center;gap:6px;padding-bottom:8px}.inline-check label{margin:0}@media(max-width:1000px){.grid,.grid3{grid-template-columns:1fr}.row{grid-template-columns:1fr 1fr}.row>*:nth-child(3){grid-column:span 2}}@media(max-width:650px){.row{display:block}.row>*{margin-bottom:9px}.row>*:nth-child(3){grid-column:auto}}
 </style>
-</head>
-
-<body>
-
+<style id="jp-unified-theme">:root{--jp-purple:#140821;--jp-gold:#c9a227;--jp-light:#f7f4fb;--jp-border:#ebe4f2}body{background:var(--jp-light);font-family:Arial,Helvetica,sans-serif;color:#211a28}button,.linkbtn{border-radius:12px}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #c9a227;outline-offset:2px}.jp-quicknav{max-width:1450px;margin:20px auto 22px;padding:0 20px;box-sizing:border-box}.jp-quicknav .jp-nav-title{font-weight:900;color:#140821;font-size:15px;margin:0 0 12px}.jp-nav-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px}.jp-nav-tile{box-sizing:border-box;min-height:135px;background:white;border:1px solid #ebe4f2;border-radius:22px;padding:16px;display:flex;flex-direction:column;gap:9px;text-decoration:none!important;color:#24113f!important;box-shadow:0 8px 22px #24113f0c;transition:transform .16s,box-shadow .16s}.jp-nav-tile:hover{transform:translateY(-3px);box-shadow:0 13px 25px #24113f20}.jp-nav-icon{width:45px;height:45px;display:flex;align-items:center;justify-content:center;border-radius:14px;background:var(--tile-bg);color:var(--tile-color);font-size:25px;font-weight:800}.jp-nav-tile strong{font-size:13px;line-height:1.35}.jp-nav-tile:nth-child(1){--tile-bg:#e8f0ff;--tile-color:#3569d8}.jp-nav-tile:nth-child(2){--tile-bg:#e4f7f2;--tile-color:#0f9a87}.jp-nav-tile:nth-child(3){--tile-bg:#fff0e5;--tile-color:#e46b24}.jp-nav-tile:nth-child(4){--tile-bg:#f3eafe;--tile-color:#8a4dd0}.jp-nav-tile:nth-child(5){--tile-bg:#fce8f2;--tile-color:#db2777}.jp-nav-tile:nth-child(6){--tile-bg:#e3f7fb;--tile-color:#0891b2}@media(max-width:600px){.jp-nav-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.jp-nav-tile{min-height:115px;padding:12px}}@media(prefers-reduced-motion:reduce){.jp-nav-tile{transition:none}}</style></head>
+<body><nav class="jp-quicknav" aria-label="Snelle navigatie"><p class="jp-nav-title">Snel naar</p><div class="jp-nav-grid"><a class="jp-nav-tile" href="/"><span class="jp-nav-icon" aria-hidden="true">⇧</span><strong>Opdrachten</strong></a><a class="jp-nav-tile" href="/personnel"><span class="jp-nav-icon" aria-hidden="true">♙</span><strong>Personeel</strong></a><a class="jp-nav-tile" href="/fleet"><span class="jp-nav-icon" aria-hidden="true">▣</span><strong>Wagenpark</strong></a><a class="jp-nav-tile" href="/plans"><span class="jp-nav-icon" aria-hidden="true">▦</span><strong>Planningen</strong></a><a class="jp-nav-tile" href="/plans?archived=1"><span class="jp-nav-icon" aria-hidden="true">▤</span><strong>Archief</strong></a><a class="jp-nav-tile" href="/personnel/hours"><span class="jp-nav-icon" aria-hidden="true">◷</span><strong>Diensturen</strong></a></div></nav>
 <div class="wrap">
-
   <div class="hero">
-
-    <h1>
-      Wagenpark & logistiek
-      <span
-        class="pill"
-        style="background:#fff7d6"
-      >
-        v10.3 · bewerkbare voorraad per standplaats
-      </span>
-    </h1>
-
-    <div>
-      <a href="/">← Terug naar opdrachten</a>
-      ·
-      <a href="/personnel">Personeel</a>
-    </div>
-
-    <p
-      style="
-        margin-bottom:0;
-        color:rgba(255,255,255,.78)
-      "
-    >
-      Beheer standplaatsen, voertuigen, standaard materiaal per voertuig
-      en extra voorraad per standplaats. Iedere opgeslagen wijziging wordt
-      onthouden en gebruikt bij een nieuwe of herberekende planning.
-    </p>
-
+    <h1>Wagenpark & logistiek <span class="pill" style="background:#fff7d6">v10.3 bewerkbare voorraad per standplaats</span></h1>
+    <div><a href="/">← Terug naar opdrachten</a> · <a href="/personnel">Personeel</a></div>
+    <p style="margin-bottom:0;color:rgba(255,255,255,.78)">Beheer standplaatsen, voertuigen, standaard materiaal per voertuig en voorraad per standplaats. Iedere wijziging die je opslaat wordt in PostgreSQL onthouden en wordt direct gebruikt bij een nieuwe of herberekende planning.</p>
   </div>
 
-
-  {% if message %}
-    <div class="ok">
-      {{message}}
-    </div>
-  {% endif %}
-
-  {% if error %}
-    <div class="bad">
-      {{error}}
-    </div>
-  {% endif %}
-
-
-  <!-- =========================================================
-       BASISREGELS
-       ========================================================= -->
+  {% if message %}<div class="ok">{{message}}</div>{% endif %}
+  {% if error %}<div class="bad">{{error}}</div>{% endif %}
 
   <div class="card">
-
-    <h2>
-      Materiaalregels – huidige basis
-    </h2>
-
-    <div
-      class="stock-card"
-      style="margin-top:0"
-    >
-
-      <h3 style="margin-top:0">
-        Standaard in iedere bus · tot 50 personen
-      </h3>
-
-      <p
-        class="muted"
-        style="
-          line-height:1.7;
-          margin-bottom:0
-        "
-      >
-        Ik hou van Holland ·
-        De Alleskunner ·
-        Minute to Win It ·
-        Moordspel ·
-        Crazy Bingo ·
-        Boogschieten ·
-        Pubquiz ·
-        Alles mag vandaag ·
-        Expeditie Robinson
+    <h2>Materiaalregels – huidige basis</h2>
+    <div class="stock-card" style="margin-top:0">
+      <h3 style="margin-top:0">Standaard in iedere bus · tot 50 personen</h3>
+      <p class="muted" style="line-height:1.7;margin-bottom:0">
+        Ik hou van Holland · De Alleskunner · Minute to Win It · Moordspel · Crazy Bingo ·
+        Boogschieten · Pubquiz · Alles mag vandaag · Expeditie Robinson
       </p>
-
     </div>
-
-    <p
-      class="muted"
-      style="
-        margin-bottom:0;
-        margin-top:12px
-      "
-    >
-      <strong>Personeelsnorm:</strong>
-      1–30 deelnemers = 1 medewerker ·
-      31–60 = 2 ·
-      61–90 = 3 ·
-      daarna steeds +1 medewerker per begonnen groep van 30.
-      Dit blijft per klus handmatig aanpasbaar.
-    </p>
-
+    <p class="muted" style="margin-bottom:0;margin-top:12px"><strong>Personeelsnorm:</strong> 1–30 deelnemers = 1 medewerker · 31–60 = 2 · 61–90 = 3 · daarna steeds +1 medewerker per begonnen groep van 30. Dit blijft per klus handmatig aanpasbaar.</p>
   </div>
 
-
-  <!-- =========================================================
-       STANDPLAATSEN
-       ========================================================= -->
-
   <div class="card">
-
-    <h2>
-      1. Standplaatsen
-    </h2>
-
-    <p class="muted section-note">
-      Voeg standplaatsen toe of wijzig bestaande adressen.
-      Een voertuig heeft een standaard standplaats, maar in de planning
-      kan deze per dienst tijdelijk worden aangepast.
-    </p>
-
+    <h2>1. Standplaatsen</h2>
+    <p class="muted section-note">Je kunt standplaatsen toevoegen en bestaande adressen wijzigen. Een voertuig heeft één standaard standplaats; in de dienstenplanning kun je die per dienst tijdelijk wijzigen.</p>
 
     {% for d in depots %}
-
-    <form
-      class="row"
-      method="post"
-      action="/fleet/depot/save"
-    >
-
-      <div>
-        <label>Code</label>
-
-        <input
-          name="code"
-          value="{{d.code}}"
-          readonly
-        >
-      </div>
-
-
-      <div>
-        <label>Naam</label>
-
-        <input
-          name="name"
-          value="{{d.name}}"
-          required
-        >
-      </div>
-
-
-      <div>
-        <label>Adres</label>
-
-        <input
-          name="address"
-          value="{{d.address}}"
-          required
-        >
-      </div>
-
-
-      <div class="inline-check">
-
-        <input
-          type="checkbox"
-          name="active"
-          {% if d.active %}checked{% endif %}
-        >
-
-        <label>
-          Actief
-        </label>
-
-      </div>
-
-
-      <div>
-        <button type="submit">
-          Opslaan
-        </button>
-      </div>
-
+    <form class="row" method="post" action="/fleet/depot/save">
+      <div><label>Code</label><input name="code" value="{{d.code}}" readonly></div>
+      <div><label>Naam</label><input name="name" value="{{d.name}}" required></div>
+      <div><label>Adres</label><input name="address" value="{{d.address}}" required></div>
+      <div class="inline-check"><input type="checkbox" name="active" {% if d.active %}checked{% endif %}><label>Actief</label></div>
+      <div><button type="submit">Opslaan</button></div>
     </form>
-
     {% endfor %}
 
-
-    <h3>
-      Nieuwe standplaats
-    </h3>
-
-    <form
-      class="row"
-      method="post"
-      action="/fleet/depot/save"
-    >
-
-      <div>
-        <label>Code</label>
-
-        <input
-          name="code"
-          placeholder="bijv. GRONINGEN"
-          required
-        >
-      </div>
-
-
-      <div>
-        <label>Naam</label>
-
-        <input
-          name="name"
-          placeholder="Groningen"
-          required
-        >
-      </div>
-
-
-      <div>
-        <label>Adres</label>
-
-        <input
-          name="address"
-          placeholder="Straat 1, Plaats"
-          required
-        >
-      </div>
-
-
-      <div class="inline-check">
-
-        <input
-          type="checkbox"
-          name="active"
-          checked
-        >
-
-        <label>
-          Actief
-        </label>
-
-      </div>
-
-
-      <div>
-        <button type="submit">
-          Toevoegen
-        </button>
-      </div>
-
+    <h3>Nieuwe standplaats</h3>
+    <form class="row" method="post" action="/fleet/depot/save">
+      <div><label>Code</label><input name="code" placeholder="bijv. GRONINGEN" required></div>
+      <div><label>Naam</label><input name="name" placeholder="Groningen" required></div>
+      <div><label>Adres</label><input name="address" placeholder="Straat 1, Plaats" required></div>
+      <div class="inline-check"><input type="checkbox" name="active" checked><label>Actief</label></div>
+      <div><button type="submit">Toevoegen</button></div>
     </form>
-
   </div>
 
-
-  <!-- =========================================================
-       VOERTUIGEN
-       ========================================================= -->
-
   <div class="card">
-
-    <h2>
-      2. Voertuigen
-    </h2>
-
-    <p class="muted section-note">
-      Voertuigcodes blijven exact zoals jij ze invoert.
-      De geselecteerde standplaats is de standaard vertrekbasis.
-    </p>
-
+    <h2>2. Voertuigen</h2>
+    <p class="muted section-note">Voertuigcodes blijven exact zoals jij ze invoert. De standplaats hieronder is de standaard vertrekbasis.</p>
 
     {% for v in vehicles %}
-
-    <form
-      class="row"
-      method="post"
-      action="/fleet/vehicle/save"
-    >
-
-      <div>
-        <label>Voertuigcode</label>
-
-        <input
-          name="code"
-          value="{{v.code}}"
-          readonly
-        >
-      </div>
-
-
-      <div>
-
-        <label>
-          Standaard standplaats
-        </label>
-
-        <select name="depot_code">
-
-          {% for d in depots %}
-
-          <option
-            value="{{d.code}}"
-            {% if d.code==v.depot_code %}selected{% endif %}
-          >
-            {{d.name}}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-
-      <div>
-
-        <label>
-          Type / notitie
-        </label>
-
-        <div
-          style="
-            display:grid;
-            grid-template-columns:130px 1fr;
-            gap:8px
-          "
-        >
-
-          <select name="vehicle_type">
-
-            <option
-              value="bus"
-              {% if v.vehicle_type=='bus' %}selected{% endif %}
-            >
-              Bus
-            </option>
-
-            <option
-              value="auto"
-              {% if v.vehicle_type=='auto' %}selected{% endif %}
-            >
-              Auto
-            </option>
-
-            <option
-              value="overig"
-              {% if v.vehicle_type not in ['bus','auto'] %}selected{% endif %}
-            >
-              Overig
-            </option>
-
-          </select>
-
-
-          <input
-            name="notes"
-            value="{{v.notes}}"
-            placeholder="Opmerking"
-          >
-
-        </div>
-
-      </div>
-
-
-      <div class="inline-check">
-
-        <input
-          type="checkbox"
-          name="active"
-          {% if v.active %}checked{% endif %}
-        >
-
-        <label>
-          Actief
-        </label>
-
-      </div>
-
-
-      <div>
-        <button type="submit">
-          Opslaan
-        </button>
-      </div>
-
+    <form class="row" method="post" action="/fleet/vehicle/save">
+      <div><label>Voertuigcode</label><input name="code" value="{{v.code}}" readonly></div>
+      <div><label>Standaard standplaats</label><select name="depot_code">{% for d in depots %}<option value="{{d.code}}" {% if d.code==v.depot_code %}selected{% endif %}>{{d.name}}</option>{% endfor %}</select></div>
+      <div><label>Type / notitie</label><div style="display:grid;grid-template-columns:130px 1fr;gap:8px"><select name="vehicle_type"><option value="bus" {% if v.vehicle_type=='bus' %}selected{% endif %}>Bus</option><option value="auto" {% if v.vehicle_type=='auto' %}selected{% endif %}>Auto</option><option value="overig" {% if v.vehicle_type not in ['bus','auto'] %}selected{% endif %}>Overig</option></select><input name="notes" value="{{v.notes}}" placeholder="Opmerking"></div></div>
+      <div class="inline-check"><input type="checkbox" name="active" {% if v.active %}checked{% endif %}><label>Actief</label></div>
+      <div><button type="submit">Opslaan</button></div>
     </form>
-
     {% endfor %}
 
-
-    <h3>
-      Nieuw voertuig
-    </h3>
-
-    <form
-      class="row"
-      method="post"
-      action="/fleet/vehicle/save"
-    >
-
-      <div>
-        <label>
-          Voertuigcode
-        </label>
-
-        <input
-          name="code"
-          placeholder="Exacte code"
-          required
-        >
-      </div>
-
-
-      <div>
-
-        <label>
-          Standaard standplaats
-        </label>
-
-        <select name="depot_code">
-
-          {% for d in depots if d.active %}
-
-          <option value="{{d.code}}">
-            {{d.name}}
-          </option>
-
-          {% endfor %}
-
-        </select>
-
-      </div>
-
-
-      <div>
-
-        <label>
-          Type / notitie
-        </label>
-
-        <div
-          style="
-            display:grid;
-            grid-template-columns:130px 1fr;
-            gap:8px
-          "
-        >
-
-          <select name="vehicle_type">
-
-            <option value="bus">
-              Bus
-            </option>
-
-            <option value="auto">
-              Auto
-            </option>
-
-            <option value="overig">
-              Overig
-            </option>
-
-          </select>
-
-
-          <input
-            name="notes"
-            placeholder="Opmerking"
-          >
-
-        </div>
-
-      </div>
-
-
-      <div class="inline-check">
-
-        <input
-          type="checkbox"
-          name="active"
-          checked
-        >
-
-        <label>
-          Actief
-        </label>
-
-      </div>
-
-
-      <div>
-        <button type="submit">
-          Toevoegen
-        </button>
-      </div>
-
+    <h3>Nieuw voertuig</h3>
+    <form class="row" method="post" action="/fleet/vehicle/save">
+      <div><label>Voertuigcode</label><input name="code" placeholder="Exacte code" required></div>
+      <div><label>Standaard standplaats</label><select name="depot_code">{% for d in depots if d.active %}<option value="{{d.code}}">{{d.name}}</option>{% endfor %}</select></div>
+      <div><label>Type / notitie</label><div style="display:grid;grid-template-columns:130px 1fr;gap:8px"><select name="vehicle_type"><option value="bus">Bus</option><option value="auto">Auto</option><option value="overig">Overig</option></select><input name="notes" placeholder="Opmerking"></div></div>
+      <div class="inline-check"><input type="checkbox" name="active" checked><label>Actief</label></div>
+      <div><button type="submit">Toevoegen</button></div>
     </form>
-
   </div>
 
-
-  <!-- =========================================================
-       MATERIAAL PER VOERTUIG
-       ========================================================= -->
-
   <div class="card">
-
-    <h2>
-      3. Standaard materiaal per voertuig
-    </h2>
-
-    <p class="muted section-note">
-      Hier stel je per voertuig in voor hoeveel personen materiaal
-      standaard in dat voertuig aanwezig is.
-      Zet capaciteit op 0 als een spel niet standaard in deze bus of auto ligt.
-    </p>
-
+    <h2>3. Standaard materiaal per voertuig</h2>
+    <p class="muted section-note">Capaciteit is het aantal personen waarvoor dit spel standaard in dát voertuig aanwezig is. Je kunt dit per voertuig aanpassen en opslaan. Zet Actief uit of capaciteit op 0 als het spel niet standaard in die auto/bus ligt; de planner gebruikt daarna direct de opgeslagen waarde.</p>
 
     {% for v in vehicles %}
-
     <div class="stock-card">
-
-      <div class="vehicle-head">
-
-        <div>
-
-          <h3 style="margin:0">
-            {{v.code}}
-          </h3>
-
-          <div class="muted">
-            {{v.depot_code}} · {{v.vehicle_type}}
-          </div>
-
-        </div>
-
-      </div>
-
-
+      <div class="vehicle-head"><div><h3 style="margin:0">{{v.code}}</h3><div class="muted">{{v.depot_code}} · {{v.vehicle_type}}</div></div></div>
       <table class="material-table">
-
-        <thead>
-
-          <tr>
-            <th>Spel / materiaal</th>
-            <th>Capaciteit in voertuig</th>
-            <th>Actief</th>
-            <th>Notitie</th>
-            <th></th>
-          </tr>
-
-        </thead>
-
+        <thead><tr><th>Spel / materiaal</th><th>Capaciteit in voertuig</th><th>Actief</th><th>Notitie</th><th></th></tr></thead>
         <tbody>
-
-
         {% for r in resources %}
-
           {% set ns=namespace(found=None) %}
-
-          {% for m in vehicle_materials %}
-
-            {% if
-              m.vehicle_code==v.code
-              and
-              m.resource_code==r.resource_code
-            %}
-
-              {% set ns.found=m %}
-
-            {% endif %}
-
-          {% endfor %}
-
-
-          <tr>
-
-            <td>
-              <strong>
-                {{r.resource_name}}
-              </strong>
-            </td>
-
-
-            <td>
-
-              <form
-                id="material-{{v.code|replace(' ','-')}}-{{r.resource_code}}"
-                method="post"
-                action="/fleet/material/save"
-              >
-
-                <input
-                  type="hidden"
-                  name="vehicle_code"
-                  value="{{v.code}}"
-                >
-
-                <input
-                  type="hidden"
-                  name="resource_code"
-                  value="{{r.resource_code}}"
-                >
-
-                <input
-                  type="number"
-                  min="0"
-                  name="capacity_persons"
-                  value="{{ns.found.capacity_persons if ns.found else 0}}"
-                >
-
-            </td>
-
-
-            <td>
-
-                <input
-                  type="checkbox"
-                  name="active"
-                  {% if ns.found and ns.found.active %}checked{% endif %}
-                >
-
-            </td>
-
-
-            <td>
-
-                <input
-                  name="notes"
-                  value="{{ns.found.notes if ns.found else ''}}"
-                >
-
-            </td>
-
-
-            <td>
-
-                <button type="submit">
-                  Opslaan
-                </button>
-
-              </form>
-
-            </td>
-
-          </tr>
-
+          {% for m in vehicle_materials %}{% if m.vehicle_code==v.code and m.resource_code==r.resource_code %}{% set ns.found=m %}{% endif %}{% endfor %}
+          <tr><form method="post" action="/fleet/material/save">
+            <input type="hidden" name="vehicle_code" value="{{v.code}}"><input type="hidden" name="resource_code" value="{{r.resource_code}}">
+            <td><strong>{{r.resource_name}}</strong></td>
+            <td><input type="number" min="0" name="capacity_persons" value="{{ns.found.capacity_persons if ns.found else 0}}"></td>
+            <td><input type="checkbox" name="active" {% if ns.found and ns.found.active %}checked{% endif %}></td>
+            <td><input name="notes" value="{{ns.found.notes if ns.found else ''}}"></td>
+            <td><button type="submit">Opslaan</button></td>
+          </form></tr>
         {% endfor %}
-
-
         </tbody>
-
       </table>
-
     </div>
-
     {% endfor %}
-
   </div>
 
-
-  <!-- =========================================================
-       EXTRA VOORRAAD PER STANDPLAATS
-       ========================================================= -->
-
   <div class="card">
-
-    <h2>
-      4. Extra voorraad per standplaats
-    </h2>
-
-    <p class="muted section-note">
-      Hier bepaal je zelf hoeveel extra materiaal op iedere standplaats ligt.
-      Vul het aantal sets en de capaciteit per set in.
-      JP Planner berekent automatisch hoeveel personen je daarmee vanaf
-      deze standplaats kunt bedienen.
-      Klik daarna op
-      <strong>Voorraad standplaats opslaan</strong>.
-    </p>
-
+    <h2>4. Extra voorraad per standplaats</h2>
+    <p class="muted section-note">Geef per spel aan hoeveel extra sets er op deze standplaats liggen en voor hoeveel personen één set geschikt is. De totale capaciteit wordt direct berekend. Klik daarna één keer op <strong>Voorraad standplaats opslaan</strong>. JP Planner bewaart alles in PostgreSQL en gebruikt de nieuwe voorraad meteen bij een nieuwe of herberekende planning.</p>
 
     {% for d in depots %}
-
-    <form
-      class="stock-card depot-stock-form"
-      method="post"
-      action="/fleet/stock/bulk-save"
-    >
-
-      <input
-        type="hidden"
-        name="depot_code"
-        value="{{d.code}}"
-      >
-
-
+    <form class="stock-card depot-stock-form" method="post" action="/fleet/stock/bulk-save">
+      <input type="hidden" name="depot_code" value="{{d.code}}">
       <div class="vehicle-head">
-
         <div>
-
-          <h3 style="margin:0">
-            {{d.name}}
-          </h3>
-
-          <div class="muted">
-            {{d.address}}
-          </div>
-
+          <h3 style="margin:0">{{d.name}}</h3>
+          <div class="muted">{{d.address}}</div>
         </div>
-
-
-        <button type="submit">
-          Voorraad standplaats opslaan
-        </button>
-
+        <button type="submit">Voorraad standplaats opslaan</button>
       </div>
-
-
-      <div style="overflow-x:auto">
-
-      <table
-        class="material-table"
-        style="margin-top:12px"
-      >
-
+      <table class="material-table" style="margin-top:12px">
         <thead>
-
           <tr>
             <th>Spel / materiaal</th>
             <th>Aantal extra sets</th>
             <th>Personen per set</th>
-            <th>Totale capaciteit</th>
+            <th>Totale capaciteit op locatie</th>
             <th>Notitie</th>
           </tr>
-
         </thead>
-
-
         <tbody>
-
         {% for r in resources %}
-
-
           {% set ns=namespace(found=None) %}
-
-
-          {% for st in stock %}
-
-            {% if
-              st.depot_code==d.code
-              and
-              st.resource_code==r.resource_code
-            %}
-
-              {% set ns.found=st %}
-
-            {% endif %}
-
-          {% endfor %}
-
-
+          {% for st in stock %}{% if st.depot_code==d.code and st.resource_code==r.resource_code %}{% set ns.found=st %}{% endif %}{% endfor %}
           <tr class="stock-row">
-
-
-            <td>
-
-              <input
-                type="hidden"
-                name="resource_code"
-                value="{{r.resource_code}}"
-              >
-
-              <strong>
-                {{r.resource_name}}
-              </strong>
-
-            </td>
-
-
-            <td>
-
-              <input
-                class="stock-qty"
-                type="number"
-                min="0"
-                step="1"
-                name="quantity"
-                value="{{ns.found.quantity if ns.found else 0}}"
-              >
-
-            </td>
-
-
-            <td>
-
-              <input
-                class="stock-cap"
-                type="number"
-                min="0"
-                step="1"
-                name="capacity_per_set"
-                value="{{ns.found.capacity_per_set if ns.found and ns.found.capacity_per_set is not none else 0}}"
-              >
-
-            </td>
-
-
-            <td>
-
-              <strong class="stock-total">
-
-                {{
-                  (
-                    (ns.found.quantity or 0)
-                    *
-                    (ns.found.capacity_per_set or 0)
-                  )
-                  if ns.found
-                  else 0
-                }}
-
-                personen
-
-              </strong>
-
-            </td>
-
-
-            <td>
-
-              <input
-                name="notes"
-                value="{{ns.found.notes if ns.found else ''}}"
-                placeholder="Bijv. altijd pakken"
-              >
-
-            </td>
-
-
+            <input type="hidden" name="resource_code" value="{{r.resource_code}}">
+            <td><strong>{{r.resource_name}}</strong></td>
+            <td><input class="stock-qty" type="number" min="0" step="1" name="quantity" value="{{ns.found.quantity if ns.found else 0}}"></td>
+            <td><input class="stock-cap" type="number" min="0" step="1" name="capacity_per_set" value="{{ns.found.capacity_per_set if ns.found and ns.found.capacity_per_set is not none else 0}}"></td>
+            <td><strong class="stock-total">{{((ns.found.quantity or 0) * (ns.found.capacity_per_set or 0)) if ns.found else 0}} personen</strong></td>
+            <td><input name="notes" value="{{ns.found.notes if ns.found else ''}}" placeholder="Bijv. kast links / altijd pakken"></td>
           </tr>
-
         {% endfor %}
-
         </tbody>
-
       </table>
-
-      </div>
-
-
-      <div
-        class="muted"
-        style="margin-top:10px"
-      >
-        Voorbeeld:
-        5 Hunted-sets × 50 personen =
-        250 personen Hunted-capaciteit op deze standplaats.
-        Zet aantal sets op 0 als dit materiaal hier niet aanwezig is.
-      </div>
-
-
-      <div class="save-bar">
-
-        <button type="submit">
-          Voorraad standplaats opslaan
-        </button>
-
-      </div>
-
+      <div class="muted" style="margin-top:10px">Voorbeeld: 2 sets × 50 personen = 100 personen extra materiaal op deze standplaats. Zet het aantal sets op 0 als dit materiaal hier niet op voorraad ligt.</div>
+      <div style="margin-top:12px"><button type="submit">Voorraad standplaats opslaan</button></div>
     </form>
-
     {% endfor %}
-
   </div>
-
 </div>
-
-
 <script>
 (function(){
-
   function refreshRow(row){
-
-    var qtyInput =
-      row.querySelector('.stock-qty');
-
-    var capInput =
-      row.querySelector('.stock-cap');
-
-    var total =
-      row.querySelector('.stock-total');
-
-
-    var qty =
-      parseInt(
-        qtyInput ?
-        qtyInput.value :
-        '0',
-        10
-      ) || 0;
-
-
-    var cap =
-      parseInt(
-        capInput ?
-        capInput.value :
-        '0',
-        10
-      ) || 0;
-
-
-    if(total){
-
-      total.textContent =
-        (qty * cap) +
-        ' personen';
-
-    }
-
+    var q=parseInt((row.querySelector('.stock-qty')||{}).value||'0',10)||0;
+    var c=parseInt((row.querySelector('.stock-cap')||{}).value||'0',10)||0;
+    var total=row.querySelector('.stock-total');
+    if(total) total.textContent=(q*c)+' personen';
   }
-
-
-  document
-  .querySelectorAll('.stock-row')
-  .forEach(function(row){
-
-    refreshRow(row);
-
-  });
-
-
-  document.addEventListener(
-    'input',
-    function(event){
-
-      if(
-        !event.target
-      ){
-        return;
-      }
-
-
-      if(
-        event.target.classList.contains('stock-qty')
-        ||
-        event.target.classList.contains('stock-cap')
-      ){
-
-        var row =
-          event.target.closest('.stock-row');
-
-
-        if(row){
-
-          refreshRow(row);
-
-        }
-
-      }
-
+  document.querySelectorAll('.stock-row').forEach(refreshRow);
+  document.addEventListener('input',function(e){
+    if(e.target && (e.target.classList.contains('stock-qty') || e.target.classList.contains('stock-cap'))){
+      var row=e.target.closest('.stock-row');
+      if(row) refreshRow(row);
     }
-  );
-
+  });
 })();
 </script>
 
