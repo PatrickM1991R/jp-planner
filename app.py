@@ -26,6 +26,17 @@ load_dotenv(); app=Flask(__name__); app.secret_key=os.getenv('FLASK_SECRET_KEY',
 def _admin_logged_in():
     return session.get('admin_login') == 'Patrick.Mayer'
 
+# Explicit allowlists protect write routes as well as pages.
+PLANNER_ENDPOINTS = {'index','upload','save_corrections','generate_logistics',
+ 'resolve_planning_issue','clear_planning_issue_resolution','plans','open_saved_plan',
+ 'archive_saved_plan','restore_saved_plan','rename_saved_plan','personnel',
+ 'personnel_add','personnel_save','finalize_roster','reopen_roster',
+ 'personnel_skill_save','personnel_skill_toggle','personnel_upload',
+ 'fleet','fleet_depot_save','fleet_save','fleet_material_save',
+ 'fleet_stock_save','fleet_stock_bulk_save','route_test','personnel_hours'}
+HR_ENDPOINTS = {'personnel','personnel_hours','hr_dashboard','hr_employee_save',
+ 'hr_adjustment_add'}
+
 @app.before_request
 def require_admin_for_management():
     endpoint = request.endpoint or ''
@@ -34,8 +45,21 @@ def require_admin_for_management():
               'static','health','approve_hours_email'}
     if endpoint in public or request.path.startswith('/static/'):
         return None
-    if not _admin_logged_in():
-        return redirect(url_for('admin_login', next=request.path))
+    if _admin_logged_in():
+        return None
+    emp = _staff_employee()
+    if emp:
+        role = emp.get('app_role') or 'medewerker'
+        if endpoint in {'planner_dashboard'} and role == 'planner':
+            return None
+        if endpoint in {'hr_dashboard','hr_employee_save','hr_adjustment_add'} and role == 'hr':
+            return None
+        if role == 'planner' and endpoint in PLANNER_ENDPOINTS:
+            return None
+        if role == 'hr' and endpoint in HR_ENDPOINTS:
+            return None
+        abort(403)
+    return redirect(url_for('admin_login', next=request.path))
 
 @app.route('/admin/setup',methods=['GET','POST'])
 def admin_setup():
@@ -876,7 +900,7 @@ def staff_login():
         password=request.form.get('password','')
         if emp and emp.get('portal_active') and emp.get('active') and emp.get('password_hash') and check_password_hash(emp['password_hash'],password):
             session['staff_employee_id']=emp['id']
-            return redirect(url_for('staff_portal'))
+            return redirect(url_for('planner_dashboard') if emp.get('app_role')=='planner' else url_for('hr_dashboard') if emp.get('app_role')=='hr' else url_for('staff_portal'))
         if emp and emp.get('portal_active') and emp.get('active') and not emp.get('password_hash'):
             error='Vraag de beheerder om een eenmalige activatie- of herstellink.'
         error='Gebruikersnaam/e-mail of wachtwoord klopt niet.'
@@ -1142,3 +1166,39 @@ def route_test():
 @app.get('/api/health')
 def health(): return {'ok':True,'ors_key_configured':bool(os.getenv('ORS_API_KEY')),'database_configured':db_status(),'routing_profile':'driving-car'}
 if __name__=='__main__': app.run(debug=True)
+
+
+# v13.4 role dashboards and HR records
+@app.get('/planner')
+def planner_dashboard():
+    return render_template('planner_dashboard.html')
+
+@app.get('/hr')
+def hr_dashboard():
+    people=db.hr_list_employees()
+    return render_template('hr_dashboard.html',people=people,message=request.args.get('message'))
+
+@app.post('/admin/users/<int:employee_id>/role')
+def admin_user_role(employee_id):
+    role=request.form.get('role','medewerker')
+    if role not in ('medewerker','planner','hr'):
+        abort(400)
+    db.set_employee_role(employee_id,role)
+    return redirect(url_for('admin_users',message='Rol opgeslagen'))
+
+@app.post('/hr/employees/<int:employee_id>')
+def hr_employee_save(employee_id):
+    try:
+        db.hr_save_employee(employee_id,request.form.get('contract_type'),request.form.get('weekly_hours'))
+        return redirect(url_for('hr_dashboard',message='Contractgegevens opgeslagen'))
+    except (ValueError,TypeError) as e:
+        return redirect(url_for('hr_dashboard',message=str(e)))
+
+@app.post('/hr/employees/<int:employee_id>/adjustment')
+def hr_adjustment_add(employee_id):
+    try:
+        db.hr_add_adjustment(employee_id,request.form.get('kind'),request.form.get('hours'),request.form.get('note',''),
+                             'admin' if _admin_logged_in() else 'hr:'+str(session.get('staff_employee_id')))
+        return redirect(url_for('hr_dashboard',message='Mutatie geregistreerd'))
+    except (ValueError,TypeError) as e:
+        return redirect(url_for('hr_dashboard',message=str(e)))

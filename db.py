@@ -479,6 +479,13 @@ def _ensure_personnel_schema(cur):
             portal_active BOOLEAN NOT NULL DEFAULT TRUE,
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )""")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS app_role TEXT NOT NULL DEFAULT 'medewerker'")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS contract_type TEXT NOT NULL DEFAULT 'flexkracht'")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS weekly_contract_hours NUMERIC(7,2) NOT NULL DEFAULT 0")
+    cur.execute("""CREATE TABLE IF NOT EXISTS employee_hr_adjustments (
+        id BIGSERIAL PRIMARY KEY, employee_id BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL, hours NUMERIC(9,2) NOT NULL, note TEXT NOT NULL DEFAULT '',
+        actor TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())""")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS level INTEGER NULL")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT ''")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS username TEXT NOT NULL DEFAULT ''")
@@ -836,7 +843,7 @@ def get_personnel():
     with connection() as conn:
         with conn.cursor() as cur:
             _ensure_personnel_schema(cur)
-            cur.execute("SELECT id,name,driving_license,own_transport,active,notes,level,email,username,portal_active,(password_hash <> '') AS has_password,updated_at FROM employees ORDER BY name")
+            cur.execute("SELECT id,name,driving_license,own_transport,active,notes,level,email,username,app_role,portal_active,(password_hash <> '') AS has_password,updated_at FROM employees ORDER BY name")
             employees = [dict(r) for r in cur.fetchall()]
             cur.execute("SELECT employee_id,week_mode,slot,status FROM employee_availability ORDER BY employee_id,week_mode,slot")
             availability = [dict(r) for r in cur.fetchall()]
@@ -1154,7 +1161,7 @@ def get_employee_by_email(email):
     with connection() as conn:
         with conn.cursor() as cur:
             _ensure_personnel_schema(cur)
-            cur.execute("""SELECT id,name,email,username,password_hash,portal_active,active,level
+            cur.execute("""SELECT id,name,email,username,password_hash,portal_active,active,level,app_role
                            FROM employees WHERE LOWER(email)=%s LIMIT 1""", (email,))
             row=cur.fetchone()
     return dict(row) if row else None
@@ -1168,7 +1175,7 @@ def get_employee_by_login(login):
     with connection() as conn:
         with conn.cursor() as cur:
             _ensure_personnel_schema(cur)
-            cur.execute("""SELECT id,name,email,username,password_hash,portal_active,active,level
+            cur.execute("""SELECT id,name,email,username,password_hash,portal_active,active,level,app_role
                            FROM employees
                            WHERE LOWER(username)=%s OR LOWER(email)=%s
                            LIMIT 1""", (login,login))
@@ -1191,7 +1198,7 @@ def get_employee_by_id(employee_id):
     with connection() as conn:
         with conn.cursor() as cur:
             _ensure_personnel_schema(cur)
-            cur.execute("""SELECT id,name,email,username,password_hash,portal_active,active,level,
+            cur.execute("""SELECT id,name,email,username,password_hash,portal_active,active,level,app_role,
                                   driving_license,own_transport,notes
                            FROM employees WHERE id=%s""", (int(employee_id),))
             row=cur.fetchone()
@@ -1527,3 +1534,61 @@ def consume_staff_reset(token_hash,password_hash):
                         (password_hash,row['employee_id']))
         conn.commit()
     return True
+
+
+# v13.4 - HR balances are explicit ledger adjustments, not inferred payroll totals.
+def set_employee_role(employee_id,role):
+    if role not in ('medewerker','planner','hr'):
+        raise ValueError('Ongeldige rol')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute('UPDATE employees SET app_role=%s,updated_at=NOW() WHERE id=%s',(role,int(employee_id)))
+            if cur.rowcount!=1: raise ValueError('Medewerker niet gevonden')
+        conn.commit()
+
+def hr_list_employees():
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""SELECT e.id,e.name,e.app_role,e.contract_type,e.weekly_contract_hours,
+              COALESCE(SUM(CASE WHEN a.kind='overuren' THEN a.hours ELSE 0 END),0) AS overuren,
+              COALESCE(SUM(CASE WHEN a.kind='vakantie' THEN a.hours ELSE 0 END),0) AS vakantie,
+              COALESCE(SUM(CASE WHEN a.kind='verlof' THEN a.hours ELSE 0 END),0) AS verlof,
+              COALESCE(SUM(CASE WHEN a.kind='ziekte' THEN a.hours ELSE 0 END),0) AS ziekte
+              FROM employees e LEFT JOIN employee_hr_adjustments a ON a.employee_id=e.id
+              GROUP BY e.id ORDER BY LOWER(e.name)""")
+            return [dict(r) for r in cur.fetchall()]
+
+def hr_save_employee(employee_id,contract_type,weekly_hours):
+    if contract_type not in ('flexkracht','zzp','uitzendbureau','vaste uren'):
+        raise ValueError('Ongeldige contractvorm')
+    from decimal import Decimal
+    hours=Decimal(str(weekly_hours))
+    if not hours.is_finite() or not 0<=hours<=80: raise ValueError('Contracturen buiten bereik')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute('UPDATE employees SET contract_type=%s,weekly_contract_hours=%s,updated_at=NOW() WHERE id=%s',
+                        (contract_type,hours,int(employee_id)))
+            if cur.rowcount!=1: raise ValueError('Medewerker niet gevonden')
+        conn.commit()
+
+def hr_add_adjustment(employee_id,kind,hours,note,actor):
+    if kind not in ('overuren','vakantie','verlof','ziekte'):
+        raise ValueError('Ongeldige mutatie')
+    from decimal import Decimal
+    amount=Decimal(str(hours))
+    if not amount.is_finite() or not -10000<=amount<=10000 or amount==0:
+        raise ValueError('Ongeldig aantal uren')
+    if not (note or '').strip(): raise ValueError('Reden verplicht')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute('INSERT INTO employee_hr_adjustments(employee_id,kind,hours,note,actor) VALUES (%s,%s,%s,%s,%s)',
+                        (int(employee_id),kind,amount,note.strip()[:500],actor))
+        conn.commit()
