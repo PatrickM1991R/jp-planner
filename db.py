@@ -482,6 +482,34 @@ def _ensure_personnel_schema(cur):
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS app_role TEXT NOT NULL DEFAULT 'medewerker'")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS contract_type TEXT NOT NULL DEFAULT 'flexkracht'")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS birth_date DATE")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS street TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS house_number TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS postal_code TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS city TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS birth_place TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS iban TEXT NOT NULL DEFAULT ''")
+    cur.execute("""CREATE TABLE IF NOT EXISTS employee_hr_documents (
+        id BIGSERIAL PRIMARY KEY,
+        employee_id BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        document_type TEXT NOT NULL CHECK (document_type IN ('contract','identity','bankcard')),
+        filename TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        encrypted_data BYTEA NOT NULL,
+        uploaded_by TEXT NOT NULL,
+        uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(employee_id, document_type)
+    )""")
+    cur.execute("""CREATE TABLE IF NOT EXISTS employee_hr_document_audit (
+        id BIGSERIAL PRIMARY KEY,
+        employee_id BIGINT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        document_type TEXT NOT NULL,
+        action TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )""")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS employment_start DATE")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS contract_end DATE")
     cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS next_evaluation DATE")
@@ -1624,6 +1652,8 @@ def hr_people_detail():
             _ensure_personnel_schema(cur)
             cur.execute("""SELECT e.id,e.name,e.contract_type,e.weekly_contract_hours,
                 e.birth_date,e.employment_start,e.contract_end,e.next_evaluation,
+                e.first_name,e.last_name,e.street,e.house_number,e.postal_code,e.city,
+                e.birth_place,e.phone,e.iban,e.email,
                 COALESCE(SUM(CASE WHEN a.kind='overuren' THEN a.hours ELSE 0 END),0) AS overuren
                 FROM employees e LEFT JOIN employee_hr_adjustments a ON a.employee_id=e.id
                 WHERE e.active=TRUE GROUP BY e.id ORDER BY lower(e.name)""")
@@ -1691,3 +1721,55 @@ def hr_set_action(employee_id,action_key,completed,actor,demo=False):
                     completed_at=EXCLUDED.completed_at,actor=EXCLUDED.actor""",
                     (int(employee_id),action_key,bool(completed),bool(completed),actor))
         conn.commit()
+
+# HR dossier: persoonsgegevens en versleutelde documenten (v13.6)
+def hr_save_identity(employee_id, values):
+    from datetime import date
+    allowed=('first_name','last_name','street','house_number','postal_code','city','birth_place','phone','iban')
+    cleaned={k:(values.get(k) or '').strip()[:200] for k in allowed}
+    iban=cleaned['iban'].replace(' ','').upper()
+    if iban and (not iban.isalnum() or not 15<=len(iban)<=34):
+        raise ValueError('Controleer het IBAN-rekeningnummer.')
+    cleaned['iban']=iban
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute('UPDATE employees SET '+', '.join(k+'=%s' for k in allowed)+',updated_at=NOW() WHERE id=%s',
+                        [cleaned[k] for k in allowed]+[int(employee_id)])
+            if cur.rowcount!=1: raise ValueError('Medewerker niet gevonden')
+        conn.commit()
+
+def hr_documents(employee_id):
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute('SELECT document_type,filename,uploaded_at FROM employee_hr_documents WHERE employee_id=%s',(int(employee_id),))
+            return {r['document_type']:dict(r) for r in cur.fetchall()}
+
+def hr_save_document(employee_id,kind,filename,mime_type,encrypted,actor):
+    if kind not in ('contract','identity','bankcard'): raise ValueError('Ongeldig documenttype')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute("""INSERT INTO employee_hr_documents(employee_id,document_type,filename,mime_type,encrypted_data,uploaded_by)
+                VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT(employee_id,document_type) DO UPDATE SET
+                filename=EXCLUDED.filename,mime_type=EXCLUDED.mime_type,encrypted_data=EXCLUDED.encrypted_data,
+                uploaded_by=EXCLUDED.uploaded_by,uploaded_at=NOW()""",(int(employee_id),kind,filename,mime_type,encrypted,actor))
+            cur.execute('INSERT INTO employee_hr_document_audit(employee_id,document_type,action,actor) VALUES (%s,%s,%s,%s)',(int(employee_id),kind,'upload',actor))
+        conn.commit()
+
+def hr_get_document(employee_id,kind,actor):
+    if kind not in ('contract','identity','bankcard'): raise ValueError('Ongeldig documenttype')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute('SELECT filename,mime_type,encrypted_data FROM employee_hr_documents WHERE employee_id=%s AND document_type=%s',(int(employee_id),kind))
+            row=cur.fetchone()
+            if row:
+                cur.execute('INSERT INTO employee_hr_document_audit(employee_id,document_type,action,actor) VALUES (%s,%s,%s,%s)',(int(employee_id),kind,'download',actor))
+        conn.commit()
+    return dict(row) if row else None

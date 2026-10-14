@@ -38,7 +38,8 @@ PLANNER_ENDPOINTS = {'index','upload','save_corrections','generate_logistics',
 HR_ENDPOINTS = {'personnel','personnel_add','personnel_save',
  'personnel_skill_save','personnel_skill_toggle','personnel_upload',
  'personnel_hours','hr_dashboard','hr_employee_save','hr_adjustment_add',
- 'hr_employee_profile','hr_event_add','hr_event_status','hr_action','hr_employees'}
+ 'hr_employee_profile','hr_event_add','hr_event_status','hr_action','hr_employees',
+ 'hr_employee_identity','hr_document_upload','hr_document_download'}
 
 @app.before_request
 def require_admin_for_management():
@@ -58,7 +59,8 @@ def require_admin_for_management():
         role = emp.get('app_role') or 'medewerker'
         if endpoint in {'planner_dashboard'} and role == 'planner':
             return None
-        if endpoint in {'hr_dashboard','hr_employee_save','hr_adjustment_add','hr_employee_profile','hr_event_add','hr_event_status','hr_action','hr_employees'} and role == 'hr':
+        if endpoint in {'hr_dashboard','hr_employee_save','hr_adjustment_add','hr_employee_profile','hr_event_add','hr_event_status','hr_action','hr_employees',
+ 'hr_employee_identity','hr_document_upload','hr_document_download'} and role == 'hr':
             return None
         if role == 'planner' and endpoint in PLANNER_ENDPOINTS:
             return None
@@ -1266,6 +1268,8 @@ def _render_hr(template,**kwargs):
     people,events,actions,demo=db.hr_people_detail()
     sections=_hr_sections(people,events,actions,demo)
     return render_template(template,people=people,sections=sections,
+        documents={e['id']:db.hr_documents(e['id']) for e in people} if template=='hr_employees.html' else {},
+        hr_form_token=_hr_form_token(),
         message=request.args.get('message'),**kwargs)
 
 @app.get('/hr/medewerkers')
@@ -1308,6 +1312,75 @@ def hr_action():
         return redirect(url_for('hr_employees' if target=='employees' else 'hr_dashboard',message='Actie bijgewerkt'))
     except (ValueError,TypeError) as e:
         return redirect(url_for('hr_dashboard',message=str(e)))
+
+# Beveiligde HR-documenten: versleuteld in PostgreSQL, nooit in /static of Render-bestanden.
+from io import BytesIO
+from flask import send_file
+from werkzeug.utils import secure_filename
+
+def _hr_form_token():
+    if 'hr_form_token' not in session:
+        session['hr_form_token']=secrets.token_urlsafe(32)
+    return session['hr_form_token']
+
+def _hr_check_form_token():
+    if not secrets.compare_digest(request.form.get('hr_form_token',''),session.get('hr_form_token','')):
+        abort(400)
+
+def _hr_document_actor():
+    return 'admin' if _admin_logged_in() else 'hr:'+str(session.get('staff_employee_id'))
+
+def _hr_document_cipher():
+    from cryptography.fernet import Fernet
+    key=os.getenv('HR_DOCUMENT_ENCRYPTION_KEY','').strip()
+    if not key:
+        raise ValueError('HR_DOCUMENT_ENCRYPTION_KEY ontbreekt op Render. Documentopslag is uitgeschakeld.')
+    try: return Fernet(key.encode('ascii'))
+    except (ValueError,TypeError): raise ValueError('HR_DOCUMENT_ENCRYPTION_KEY is ongeldig.')
+
+@app.post('/hr/employees/<int:employee_id>/identity')
+def hr_employee_identity(employee_id):
+    _hr_check_form_token()
+    try:
+        db.hr_save_identity(employee_id,request.form)
+        return redirect(url_for('hr_employees',message='NAW- en bankgegevens opgeslagen')+'#employee-'+str(employee_id))
+    except ValueError as e:
+        return redirect(url_for('hr_employees',message=str(e))+'#employee-'+str(employee_id))
+
+@app.post('/hr/employees/<int:employee_id>/documents/<kind>')
+def hr_document_upload(employee_id,kind):
+    _hr_check_form_token()
+    try:
+        cipher=_hr_document_cipher()
+        f=request.files.get('document')
+        if not f or not f.filename: raise ValueError('Selecteer eerst een document.')
+        filename=secure_filename(f.filename)
+        ext=filename.rsplit('.',1)[-1].lower() if '.' in filename else ''
+        if ext not in {'pdf','jpg','jpeg','png'}: raise ValueError('Alleen PDF, JPG en PNG toegestaan.')
+        data=f.stream.read(5*1024*1024+1)
+        if not data or len(data)>5*1024*1024: raise ValueError('Document mag maximaal 5 MB zijn.')
+        signatures={'pdf':data.startswith(b'%PDF-'),'jpg':data.startswith(b'\xff\xd8\xff'),
+                    'jpeg':data.startswith(b'\xff\xd8\xff'),
+                    'png':data.startswith(b'\x89PNG\r\n\x1a\n')}
+        if not signatures[ext]: raise ValueError('Bestandstype komt niet overeen met de inhoud.')
+        mime={'pdf':'application/pdf','jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png'}[ext]
+        db.hr_save_document(employee_id,kind,filename,mime,cipher.encrypt(data),_hr_document_actor())
+        return redirect(url_for('hr_employees',message='Document veilig opgeslagen')+'#employee-'+str(employee_id))
+    except (ValueError,ImportError) as e:
+        return redirect(url_for('hr_employees',message=str(e))+'#employee-'+str(employee_id))
+
+@app.get('/hr/employees/<int:employee_id>/documents/<kind>')
+def hr_document_download(employee_id,kind):
+    try:
+        cipher=_hr_document_cipher()
+        row=db.hr_get_document(employee_id,kind,_hr_document_actor())
+        if not row: abort(404)
+        raw=cipher.decrypt(bytes(row['encrypted_data']))
+        response=send_file(BytesIO(raw),mimetype=row['mime_type'],as_attachment=True,download_name=row['filename'])
+        response.headers['Cache-Control']='no-store, private'
+        response.headers['X-Content-Type-Options']='nosniff'
+        return response
+    except (ValueError,ImportError): abort(503)
 
 if __name__=='__main__':
     app.run(debug=True)
