@@ -39,7 +39,7 @@ HR_ENDPOINTS = {'personnel','personnel_add','personnel_save',
  'personnel_skill_save','personnel_skill_toggle','personnel_upload',
  'personnel_hours','hr_dashboard','hr_employee_save','hr_adjustment_add',
  'hr_employee_profile','hr_event_add','hr_event_status','hr_action','hr_employees',
- 'hr_employee_identity','hr_document_upload','hr_document_download'}
+ 'hr_employee_identity','hr_document_upload','hr_document_download','hr_document_delete'}
 
 @app.before_request
 def require_admin_for_management():
@@ -60,7 +60,7 @@ def require_admin_for_management():
         if endpoint in {'planner_dashboard'} and role == 'planner':
             return None
         if endpoint in {'hr_dashboard','hr_employee_save','hr_adjustment_add','hr_employee_profile','hr_event_add','hr_event_status','hr_action','hr_employees',
- 'hr_employee_identity','hr_document_upload','hr_document_download'} and role == 'hr':
+ 'hr_employee_identity','hr_document_upload','hr_document_download','hr_document_delete'} and role == 'hr':
             return None
         if role == 'planner' and endpoint in PLANNER_ENDPOINTS:
             return None
@@ -1267,7 +1267,8 @@ def _hr_sections(people,events,actions,demo):
 def _render_hr(template,**kwargs):
     people,events,actions,demo=db.hr_people_detail()
     sections=_hr_sections(people,events,actions,demo)
-    return render_template(template,people=people,sections=sections,
+    dossier_checks={e['id']:db.hr_dossier_check(e,db.hr_documents(e['id'])) for e in people} if template=='hr_employees.html' else {}
+    return render_template(template,people=people,sections=sections,dossier_checks=dossier_checks,
         documents={e['id']:db.hr_documents(e['id']) for e in people} if template=='hr_employees.html' else {},
         hr_form_token=_hr_form_token(),
         message=request.args.get('message'),**kwargs)
@@ -1367,6 +1368,16 @@ def hr_document_upload(employee_id,kind):
         db.hr_save_document(employee_id,kind,filename,mime,cipher.encrypt(data),_hr_document_actor())
         return redirect(url_for('hr_employees',message='Document veilig opgeslagen')+'#employee-'+str(employee_id))
     except (ValueError,ImportError) as e:
+        return redirect(url_for('hr_employees',message=str(e))+'#employee-'+str(employee_id))
+
+@app.post('/hr/employees/<int:employee_id>/documents/<kind>/delete')
+def hr_document_delete(employee_id,kind):
+    _hr_check_form_token()
+    try:
+        removed=db.hr_delete_document(employee_id,kind,_hr_document_actor())
+        msg='Document verwijderd' if removed else 'Document niet gevonden'
+        return redirect(url_for('hr_employees',message=msg)+'#employee-'+str(employee_id))
+    except ValueError as e:
         return redirect(url_for('hr_employees',message=str(e))+'#employee-'+str(employee_id))
 
 @app.get('/hr/employees/<int:employee_id>/documents/<kind>')

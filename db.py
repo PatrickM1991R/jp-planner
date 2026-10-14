@@ -1773,3 +1773,41 @@ def hr_get_document(employee_id,kind,actor):
                 cur.execute('INSERT INTO employee_hr_document_audit(employee_id,document_type,action,actor) VALUES (%s,%s,%s,%s)',(int(employee_id),kind,'download',actor))
         conn.commit()
     return dict(row) if row else None
+
+
+# v13.7: HR document management and completeness metadata.
+def hr_delete_document(employee_id, kind, actor):
+    if kind not in ('contract', 'identity', 'bankcard'):
+        raise ValueError('Ongeldig documenttype')
+    ensure_schema()
+    with connection() as conn:
+        with conn.cursor() as cur:
+            _ensure_personnel_schema(cur)
+            cur.execute('DELETE FROM employee_hr_documents WHERE employee_id=%s AND document_type=%s RETURNING id',
+                        (int(employee_id), kind))
+            deleted = cur.fetchone() is not None
+            if deleted:
+                cur.execute('INSERT INTO employee_hr_document_audit(employee_id,document_type,action,actor) VALUES (%s,%s,%s,%s)',
+                            (int(employee_id),kind,'delete',actor))
+        conn.commit()
+    return deleted
+
+
+def hr_dossier_check(person, documents):
+    """Presence checklist; no claim of legal compliance or verified document content."""
+    fields = [
+        ('first_name','Voornaam'), ('last_name','Achternaam'),
+        ('street','Straat'), ('house_number','Huisnummer'),
+        ('postal_code','Postcode'), ('city','Woonplaats'),
+        ('birth_date','Geboortedatum'), ('birth_place','Geboorteplaats'),
+        ('phone','Telefoonnummer'), ('email','E-mailadres'),
+        ('iban','IBAN'), ('employment_start','Datum indiensttreding'),
+        ('contract_type','Contractvorm'),
+    ]
+    checklist=[{'label':label,'filled':bool(person.get(key))} for key,label in fields]
+    # Zero contract hours can be a valid flexible contract; don't mark it incomplete.
+    checklist.append({'label':'Contracturen vastgelegd','filled':person.get('weekly_contract_hours') is not None})
+    for kind,label in [('contract','Arbeidscontract'),('identity','Identiteitsdocument'),('bankcard','Bankpasdocument')]:
+        checklist.append({'label':label,'filled':kind in documents,'document':True})
+    return {'done':sum(1 for x in checklist if x['filled']), 'total':len(checklist),
+            'missing':[x['label'] for x in checklist if not x['filled']], 'items':checklist}
